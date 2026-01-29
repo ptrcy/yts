@@ -1,62 +1,45 @@
 // Netlify serverless function for YouTube Playlist Summarizer
-// Uses YouTube Data API, Supadata API for transcripts, and Claude API for summaries
+// Uses YouTube Data API, Supadata SDK for transcripts, and Claude API for summaries
+
+import { Supadata } from '@supadata/js';
 
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
-const SUPADATA_API_BASE = 'https://api.supadata.ai/v1';
 const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com';
 
-// Fetch transcript using Supadata API
+// Fetch transcript using Supadata SDK
 async function fetchTranscript(videoId, supadataApiKey) {
   const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
   try {
-    // Request transcript from Supadata (GET request with query params)
-    const url = new URL(`${SUPADATA_API_BASE}/transcript`);
-    url.searchParams.set('url', videoUrl);
-    url.searchParams.set('text', 'true');
+    const supadata = new Supadata({ apiKey: supadataApiKey });
 
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: {
-        'x-api-key': supadataApiKey
-      }
+    const result = await supadata.transcript({
+      url: videoUrl,
+      text: true
     });
 
-    // Handle async job (HTTP 202)
-    if (response.status === 202) {
-      const data = await response.json();
-      const jobId = data.jobId || data.job_id;
-
-      if (!jobId) {
-        console.error(`Supadata returned 202 but no job ID for ${videoId}`);
-        return null;
-      }
-
-      console.log(`Supadata async job started for ${videoId}: ${jobId}`);
+    // Check if we got a job ID (async processing)
+    if ('jobId' in result) {
+      console.log(`Supadata async job started for ${videoId}: ${result.jobId}`);
 
       // Poll for results (max 20 attempts, 5 seconds apart)
       for (let i = 0; i < 20; i++) {
         await new Promise(resolve => setTimeout(resolve, 5000));
 
-        const jobResponse = await fetch(`${SUPADATA_API_BASE}/transcript/${jobId}`, {
-          headers: {
-            'x-api-key': supadataApiKey
+        try {
+          const jobResult = await supadata.transcript.getJobStatus(result.jobId);
+
+          if (jobResult.status === 'completed' && jobResult.content) {
+            return jobResult.content;
           }
-        });
 
-        if (!jobResponse.ok) {
+          if (jobResult.status === 'failed') {
+            console.error(`Supadata job failed for ${videoId}: ${jobResult.error}`);
+            return null;
+          }
+        } catch (pollError) {
+          console.error(`Error polling job for ${videoId}:`, pollError);
           continue;
-        }
-
-        const jobData = await jobResponse.json();
-
-        if (jobData.status === 'completed' || jobData.content) {
-          return jobData.content || null;
-        }
-
-        if (jobData.status === 'failed') {
-          console.error(`Supadata job failed for ${videoId}: ${jobData.error}`);
-          return null;
         }
       }
 
@@ -64,29 +47,16 @@ async function fetchTranscript(videoId, supadataApiKey) {
       return null;
     }
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Supadata error for ${videoId}: ${response.status} - ${errorText}`);
-      return null;
+    // Direct result
+    if (result.content) {
+      return result.content;
     }
 
-    const data = await response.json();
-
-    // Return content directly
-    if (data.content) {
-      return data.content;
-    }
-
-    // Fallback: check for other response formats
-    if (typeof data === 'string') {
-      return data;
-    }
-
-    console.error(`Unexpected Supadata response format for ${videoId}:`, JSON.stringify(data).substring(0, 200));
+    console.error(`Unexpected Supadata response format for ${videoId}`);
     return null;
 
   } catch (error) {
-    console.error(`Error fetching transcript for ${videoId}:`, error);
+    console.error(`Error fetching transcript for ${videoId}:`, error.message || error);
     return null;
   }
 }
