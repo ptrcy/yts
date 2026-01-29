@@ -6,59 +6,35 @@ import { Supadata } from '@supadata/js';
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com';
 
+// CORS headers
+const headers = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Content-Type': 'application/json'
+};
+
 // Fetch transcript using Supadata SDK
 async function fetchTranscript(videoId, supadataApiKey) {
   const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-  try {
-    const supadata = new Supadata({ apiKey: supadataApiKey });
+  const supadata = new Supadata({ apiKey: supadataApiKey });
 
-    const result = await supadata.transcript({
-      url: videoUrl,
-      text: true
-    });
+  const result = await supadata.transcript({
+    url: videoUrl,
+    text: true
+  });
 
-    // Check if we got a job ID (async processing)
-    if ('jobId' in result) {
-      console.log(`Supadata async job started for ${videoId}: ${result.jobId}`);
-
-      // Poll for results (max 20 attempts, 5 seconds apart)
-      for (let i = 0; i < 20; i++) {
-        await new Promise(resolve => setTimeout(resolve, 5000));
-
-        try {
-          const jobResult = await supadata.transcript.getJobStatus(result.jobId);
-
-          if (jobResult.status === 'completed' && jobResult.content) {
-            return jobResult.content;
-          }
-
-          if (jobResult.status === 'failed') {
-            console.error(`Supadata job failed for ${videoId}: ${jobResult.error}`);
-            return null;
-          }
-        } catch (pollError) {
-          console.error(`Error polling job for ${videoId}:`, pollError);
-          continue;
-        }
-      }
-
-      console.error(`Supadata timeout waiting for transcript: ${videoId}`);
-      return null;
-    }
-
-    // Direct result
-    if (result.content) {
-      return result.content;
-    }
-
-    console.error(`Unexpected Supadata response format for ${videoId}`);
-    return null;
-
-  } catch (error) {
-    console.error(`Error fetching transcript for ${videoId}:`, error.message || error);
-    return null;
+  // Check if we got a job ID (async processing) - not supported in quick mode
+  if ('jobId' in result) {
+    throw new Error('Transcript requires async processing - not supported');
   }
+
+  if (result.content) {
+    return result.content;
+  }
+
+  throw new Error('No transcript available');
 }
 
 // Fetch playlist info
@@ -67,7 +43,8 @@ async function getPlaylistTitle(playlistId, apiKey) {
   const response = await fetch(url);
 
   if (!response.ok) {
-    throw new Error('Failed to fetch playlist info');
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || 'Failed to fetch playlist info');
   }
 
   const data = await response.json();
@@ -93,13 +70,13 @@ async function getRecentVideos(playlistId, apiKey, hoursBack) {
     const response = await fetch(url.toString());
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error?.message || 'Failed to fetch playlist items');
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || 'Failed to fetch playlist items');
     }
 
     const data = await response.json();
 
-    for (const item of data.items) {
+    for (const item of data.items || []) {
       const publishedAt = new Date(item.snippet.publishedAt);
 
       if (publishedAt >= cutoffDate) {
@@ -115,7 +92,7 @@ async function getRecentVideos(playlistId, apiKey, hoursBack) {
     nextPageToken = data.nextPageToken;
 
     // Stop if we've gone past the cutoff date
-    if (data.items.length > 0) {
+    if (data.items && data.items.length > 0) {
       const lastDate = new Date(data.items[data.items.length - 1].snippet.publishedAt);
       if (lastDate < cutoffDate) {
         break;
@@ -137,7 +114,7 @@ Use bullet points, headers, and formatting to make the summary easy to read.
 Video Title: ${title}
 
 Transcript:
-${transcript.substring(0, 50000)}`; // Limit transcript length
+${transcript.substring(0, 50000)}`;
 
   const response = await fetch(`${baseUrl}/v1/messages`, {
     method: 'POST',
@@ -157,67 +134,23 @@ ${transcript.substring(0, 50000)}`; // Limit transcript length
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || 'Failed to generate summary');
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || 'Failed to generate summary');
   }
 
   const data = await response.json();
 
-  // Extract text from content blocks
-  for (const block of data.content) {
+  for (const block of data.content || []) {
     if (block.type === 'text') {
       return block.text;
     }
   }
 
-  return 'No summary generated';
-}
-
-// Process a single video
-async function processVideo(video, claudeApiKey, claudeBaseUrl, supadataApiKey) {
-  console.log(`Processing: ${video.title}`);
-
-  const transcript = await fetchTranscript(video.videoId, supadataApiKey);
-
-  if (!transcript) {
-    return {
-      ...video,
-      summary: 'No transcript available for this video.',
-      status: 'failed'
-    };
-  }
-
-  console.log(`  Got transcript (${transcript.length} chars)`);
-
-  try {
-    const summary = await summarizeTranscript(transcript, video.title, claudeApiKey, claudeBaseUrl);
-    console.log(`  Summary generated`);
-
-    return {
-      ...video,
-      summary,
-      status: 'success'
-    };
-  } catch (error) {
-    console.error(`  Error summarizing: ${error.message}`);
-    return {
-      ...video,
-      summary: `Error generating summary: ${error.message}`,
-      status: 'failed'
-    };
-  }
+  throw new Error('No summary generated');
 }
 
 // Main handler
 export async function handler(event) {
-  // CORS headers
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Content-Type': 'application/json'
-  };
-
   // Handle preflight
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers };
@@ -232,62 +165,74 @@ export async function handler(event) {
   }
 
   try {
-    const {
-      playlistId,
-      hoursBack,
-      youtubeApiKey,
-      claudeApiKey,
-      claudeBaseUrl,
-      supadataApiKey
-    } = JSON.parse(event.body);
+    const body = JSON.parse(event.body);
+    const { action } = body;
 
-    // Validate inputs
-    if (!playlistId || !youtubeApiKey || !claudeApiKey || !supadataApiKey) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: 'Missing required parameters' })
-      };
-    }
+    // ACTION: LIST - Get playlist videos (fast)
+    if (action === 'list') {
+      const { playlistId, hoursBack, youtubeApiKey } = body;
 
-    const hours = parseInt(hoursBack) || 168;
+      if (!playlistId || !youtubeApiKey) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: 'Missing playlistId or youtubeApiKey' })
+        };
+      }
 
-    console.log(`Fetching playlist: ${playlistId}, hours back: ${hours}`);
+      const hours = parseInt(hoursBack) || 168;
+      const playlistTitle = await getPlaylistTitle(playlistId, youtubeApiKey);
+      const videos = await getRecentVideos(playlistId, youtubeApiKey, hours);
 
-    // Get playlist title
-    const playlistTitle = await getPlaylistTitle(playlistId, youtubeApiKey);
-    console.log(`Playlist: ${playlistTitle}`);
-
-    // Get recent videos
-    const videos = await getRecentVideos(playlistId, youtubeApiKey, hours);
-    console.log(`Found ${videos.length} recent videos`);
-
-    if (videos.length === 0) {
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify({
-          playlistTitle,
-          videos: [],
-          message: 'No recent videos found'
-        })
+        body: JSON.stringify({ playlistTitle, videos })
       };
     }
 
-    // Process videos (sequentially to avoid rate limits)
-    const results = [];
-    for (const video of videos) {
-      const result = await processVideo(video, claudeApiKey, claudeBaseUrl, supadataApiKey);
-      results.push(result);
+    // ACTION: PROCESS - Process a single video
+    if (action === 'process') {
+      const { video, claudeApiKey, claudeBaseUrl, supadataApiKey } = body;
+
+      if (!video || !claudeApiKey || !supadataApiKey) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: 'Missing video, claudeApiKey, or supadataApiKey' })
+        };
+      }
+
+      try {
+        const transcript = await fetchTranscript(video.videoId, supadataApiKey);
+        const summary = await summarizeTranscript(transcript, video.title, claudeApiKey, claudeBaseUrl);
+
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({
+            ...video,
+            summary,
+            status: 'success'
+          })
+        };
+      } catch (err) {
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({
+            ...video,
+            summary: `Error: ${err.message}`,
+            status: 'failed'
+          })
+        };
+      }
     }
 
     return {
-      statusCode: 200,
+      statusCode: 400,
       headers,
-      body: JSON.stringify({
-        playlistTitle,
-        videos: results
-      })
+      body: JSON.stringify({ error: 'Invalid action. Use "list" or "process".' })
     };
 
   } catch (error) {
@@ -295,7 +240,7 @@ export async function handler(event) {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: error.message })
+      body: JSON.stringify({ error: error.message || 'Internal server error' })
     };
   }
 }

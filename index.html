@@ -1045,37 +1045,83 @@
             elements.resultsHeader.classList.remove('active');
             elements.resultsGrid.innerHTML = '';
 
-            updateProgress('Connecting to API...');
-
             try {
-                const response = await fetch('/.netlify/functions/summarize', {
+                // Step 1: Get video list
+                updateProgress('Fetching playlist videos...');
+
+                const listResponse = await fetch('/.netlify/functions/summarize', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(settings)
+                    body: JSON.stringify({
+                        action: 'list',
+                        playlistId: settings.playlistId,
+                        hoursBack: settings.hoursBack,
+                        youtubeApiKey: settings.youtubeApiKey
+                    })
                 });
 
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.error || 'Failed to summarize playlist');
+                if (!listResponse.ok) {
+                    const error = await listResponse.json();
+                    throw new Error(error.error || 'Failed to fetch playlist');
                 }
 
-                const data = await response.json();
+                const listData = await listResponse.json();
+                const { playlistTitle, videos } = listData;
 
-                // Hide progress, show results
-                elements.progressSection.classList.remove('active');
+                if (videos.length === 0) {
+                    elements.progressSection.classList.remove('active');
+                    showToast('No recent videos found in playlist', 'error');
+                    elements.summarizeBtn.disabled = false;
+                    return;
+                }
+
+                // Show results header
                 elements.resultsHeader.classList.add('active');
+                elements.resultsTitle.textContent = playlistTitle || 'Summaries';
+                elements.resultsMeta.textContent = `0 of ${videos.length} videos summarized`;
 
-                if (data.playlistTitle) {
-                    elements.resultsTitle.textContent = data.playlistTitle;
+                // Step 2: Process each video one by one
+                const results = [];
+                for (let i = 0; i < videos.length; i++) {
+                    const video = videos[i];
+                    updateProgress(`Processing video ${i + 1} of ${videos.length}...`, video.title);
+
+                    try {
+                        const processResponse = await fetch('/.netlify/functions/summarize', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                action: 'process',
+                                video,
+                                claudeApiKey: settings.claudeApiKey,
+                                claudeBaseUrl: settings.claudeBaseUrl,
+                                supadataApiKey: settings.supadataApiKey
+                            })
+                        });
+
+                        const result = await processResponse.json();
+                        results.push(result);
+
+                        // Update UI immediately with this result
+                        elements.resultsGrid.innerHTML = results.map(createVideoCard).join('');
+                        const successCount = results.filter(v => v.status === 'success').length;
+                        elements.resultsMeta.textContent = `${successCount} of ${videos.length} videos summarized`;
+
+                    } catch (err) {
+                        console.error(`Error processing ${video.title}:`, err);
+                        results.push({
+                            ...video,
+                            summary: `Error: ${err.message}`,
+                            status: 'failed'
+                        });
+                        elements.resultsGrid.innerHTML = results.map(createVideoCard).join('');
+                    }
                 }
 
-                const successCount = data.videos.filter(v => v.status === 'success').length;
-                elements.resultsMeta.textContent = `${successCount} of ${data.videos.length} videos summarized`;
-
-                // Render video cards
-                elements.resultsGrid.innerHTML = data.videos.map(createVideoCard).join('');
-
-                showToast(`Successfully processed ${data.videos.length} videos`, 'success');
+                // Done
+                elements.progressSection.classList.remove('active');
+                const successCount = results.filter(v => v.status === 'success').length;
+                showToast(`Processed ${results.length} videos (${successCount} successful)`, 'success');
 
             } catch (error) {
                 console.error('Error:', error);
