@@ -116,7 +116,7 @@ Language instructions: If the transcript is in French, Spanish, or Arabic, write
 Video Title: ${title}
 
 Transcript:
-${transcript.substring(0, 50000)}`;
+${transcript.substring(0, 70000)}`;
 
   const response = await fetch(`${baseUrl}/v1/messages`, {
     method: 'POST',
