@@ -111,6 +111,8 @@ async function summarizeTranscript(transcript, title, claudeApiKey, claudeBaseUr
 Focus on the main points, key takeaways, and important details.
 Use bullet points, headers, and formatting to make the summary easy to read.
 
+Language instructions: If the transcript is in French, Spanish, or Arabic, write the summary in that same language. Otherwise, write the summary in English.
+
 Video Title: ${title}
 
 Transcript:
