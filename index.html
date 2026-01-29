@@ -26,12 +26,12 @@
             --text-primary: #fafafa;
             --text-secondary: #a0a0a5;
             --text-muted: #6a6a70;
-            --accent: #ff3b30;
-            --accent-glow: rgba(255, 59, 48, 0.4);
-            --accent-soft: rgba(255, 59, 48, 0.1);
+            --accent: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.4);
+            --accent-soft: rgba(99, 102, 241, 0.1);
             --success: #30d158;
             --warning: #ffd60a;
-            --gradient-spotlight: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255, 59, 48, 0.15), transparent);
+            --gradient-spotlight: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.15), transparent);
         }
 
         [data-theme="light"] {
@@ -44,12 +44,12 @@
             --text-primary: #1d1d1f;
             --text-secondary: #6e6e73;
             --text-muted: #8e8e93;
-            --accent: #ff3b30;
-            --accent-glow: rgba(255, 59, 48, 0.3);
-            --accent-soft: rgba(255, 59, 48, 0.08);
+            --accent: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.3);
+            --accent-soft: rgba(99, 102, 241, 0.08);
             --success: #28a745;
             --warning: #ffcc00;
-            --gradient-spotlight: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255, 59, 48, 0.08), transparent);
+            --gradient-spotlight: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.08), transparent);
         }
 
         html {
@@ -297,7 +297,7 @@
             font-weight: 500;
             letter-spacing: 0.02em;
             color: var(--text-primary);
-            background: linear-gradient(135deg, var(--accent) 0%, #ff6b5b 100%);
+            background: linear-gradient(135deg, var(--accent) 0%, #818cf8 100%);
             border: none;
             border-radius: 100px;
             cursor: pointer;
@@ -309,7 +309,7 @@
             content: '';
             position: absolute;
             inset: 0;
-            background: linear-gradient(135deg, #ff6b5b 0%, var(--accent) 100%);
+            background: linear-gradient(135deg, #818cf8 0%, var(--accent) 100%);
             opacity: 0;
             transition: opacity 0.4s ease;
         }
@@ -737,7 +737,7 @@
         }
 
         .btn-primary:hover {
-            background: #ff5246;
+            background: #818cf8;
         }
 
         /* Toast */
@@ -839,7 +839,7 @@
         <header>
             <div class="logo">
                 <h1>Playlist Summarizer</h1>
-                <span class="logo-subtitle">YouTube • AI-Powered</span>
+                <span class="logo-subtitle">YouTube</span>
             </div>
             <div class="header-controls">
                 <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
@@ -872,7 +872,6 @@
                 <span class="dot"></span>
                 <span id="playlistStatus">No playlist configured</span>
             </div>
-            <p class="hero-text">Transform your YouTube playlist into concise, AI-generated summaries. Save time by getting the key insights from multiple videos at once.</p>
             <button class="action-btn" id="summarizeBtn">
                 <span>Summarize Recent Videos</span>
             </button>
