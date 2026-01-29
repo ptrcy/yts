@@ -10,19 +10,59 @@ async function fetchTranscript(videoId, supadataApiKey) {
   const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
   try {
-    // Request transcript from Supadata
-    const response = await fetch(`${SUPADATA_API_BASE}/youtube/transcript`, {
-      method: 'POST',
+    // Request transcript from Supadata (GET request with query params)
+    const url = new URL(`${SUPADATA_API_BASE}/transcript`);
+    url.searchParams.set('url', videoUrl);
+    url.searchParams.set('text', 'true');
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         'x-api-key': supadataApiKey
-      },
-      body: JSON.stringify({
-        url: videoUrl,
-        text: true,
-        mode: 'auto'
-      })
+      }
     });
+
+    // Handle async job (HTTP 202)
+    if (response.status === 202) {
+      const data = await response.json();
+      const jobId = data.jobId || data.job_id;
+
+      if (!jobId) {
+        console.error(`Supadata returned 202 but no job ID for ${videoId}`);
+        return null;
+      }
+
+      console.log(`Supadata async job started for ${videoId}: ${jobId}`);
+
+      // Poll for results (max 20 attempts, 5 seconds apart)
+      for (let i = 0; i < 20; i++) {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        const jobResponse = await fetch(`${SUPADATA_API_BASE}/transcript/${jobId}`, {
+          headers: {
+            'x-api-key': supadataApiKey
+          }
+        });
+
+        if (!jobResponse.ok) {
+          continue;
+        }
+
+        const jobData = await jobResponse.json();
+
+        if (jobData.status === 'completed' || jobData.content) {
+          return jobData.content || null;
+        }
+
+        if (jobData.status === 'failed') {
+          console.error(`Supadata job failed for ${videoId}: ${jobData.error}`);
+          return null;
+        }
+      }
+
+      console.error(`Supadata timeout waiting for transcript: ${videoId}`);
+      return null;
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -32,43 +72,9 @@ async function fetchTranscript(videoId, supadataApiKey) {
 
     const data = await response.json();
 
-    // Check if we got immediate content
+    // Return content directly
     if (data.content) {
       return data.content;
-    }
-
-    // Check if it's a batch job that needs polling
-    if (data.job_id) {
-      console.log(`Supadata async job started for ${videoId}: ${data.job_id}`);
-
-      // Poll for results (max 20 attempts, 5 seconds apart)
-      for (let i = 0; i < 20; i++) {
-        await new Promise(resolve => setTimeout(resolve, 5000));
-
-        const batchResponse = await fetch(`${SUPADATA_API_BASE}/youtube/batch/${data.job_id}`, {
-          headers: {
-            'x-api-key': supadataApiKey
-          }
-        });
-
-        if (!batchResponse.ok) {
-          continue;
-        }
-
-        const batchData = await batchResponse.json();
-
-        if (batchData.status === 'completed') {
-          return batchData.result?.content || batchData.content || null;
-        }
-
-        if (batchData.status === 'failed') {
-          console.error(`Supadata batch job failed for ${videoId}: ${batchData.error}`);
-          return null;
-        }
-      }
-
-      console.error(`Supadata timeout waiting for transcript: ${videoId}`);
-      return null;
     }
 
     // Fallback: check for other response formats
@@ -76,7 +82,7 @@ async function fetchTranscript(videoId, supadataApiKey) {
       return data;
     }
 
-    console.error(`Unexpected Supadata response format for ${videoId}`);
+    console.error(`Unexpected Supadata response format for ${videoId}:`, JSON.stringify(data).substring(0, 200));
     return null;
 
   } catch (error) {
