@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Playlist Summarizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-deep: #0a0a0b;
+            --bg-surface: #111113;
+            --bg-elevated: #1a1a1d;
+            --bg-hover: #222226;
+            --border: #2a2a2e;
+            --border-subtle: #1f1f23;
+            --text-primary: #fafafa;
+            --text-secondary: #a0a0a5;
+            --text-muted: #6a6a70;
+            --accent: #ff3b30;
+            --accent-glow: rgba(255, 59, 48, 0.4);
+            --accent-soft: rgba(255, 59, 48, 0.1);
+            --success: #30d158;
+            --warning: #ffd60a;
+            --gradient-spotlight: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255, 59, 48, 0.15), transparent);
+        }
+
+        html {
+            font-size: 16px;
+        }
+
+        body {
+            font-family: 'DM Sans', -apple-system, sans-serif;
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Ambient background */
+        .ambient-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 100vh;
+            background: var(--gradient-spotlight);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .ambient-bg::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            opacity: 0.03;
+        }
+
+        /* Main container */
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem 4rem;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 4rem;
+            padding-top: 1rem;
+        }
+
+        .logo {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .logo h1 {
+            font-family: 'Instrument Serif', Georgia, serif;
+            font-size: clamp(2.5rem, 6vw, 4rem);
+            font-weight: 400;
+            letter-spacing: -0.03em;
+            line-height: 1;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .logo-subtitle {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .settings-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .settings-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border-color: var(--text-muted);
+            transform: rotate(45deg);
+        }
+
+        .settings-btn svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        /* Hero section */
+        .hero {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .playlist-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+        }
+
+        .playlist-badge.configured {
+            border-color: var(--accent);
+            background: var(--accent-soft);
+        }
+
+        .playlist-badge .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+        }
+
+        .playlist-badge.configured .dot {
+            background: var(--accent);
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        .hero-text {
+            font-family: 'Instrument Serif', Georgia, serif;
+            font-size: clamp(1.25rem, 3vw, 1.75rem);
+            color: var(--text-secondary);
+            font-weight: 400;
+            font-style: italic;
+            margin-bottom: 2.5rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* Action button */
+        .action-btn {
+            position: relative;
+            padding: 1.125rem 2.5rem;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 1rem;
+            font-weight: 500;
+            letter-spacing: 0.02em;
+            color: var(--text-primary);
+            background: linear-gradient(135deg, var(--accent) 0%, #ff6b5b 100%);
+            border: none;
+            border-radius: 100px;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+
+        .action-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, #ff6b5b 0%, var(--accent) 100%);
+            opacity: 0;
+            transition: opacity 0.4s ease;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 40px -10px var(--accent-glow);
+        }
+
+        .action-btn:hover::before {
+            opacity: 1;
+        }
+
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .action-btn span {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Progress section */
+        .progress-section {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .progress-section.active {
+            display: flex;
+        }
+
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .progress-text {
+            font-size: 0.9375rem;
+            color: var(--text-secondary);
+        }
+
+        .progress-detail {
+            font-size: 0.8125rem;
+            color: var(--text-muted);
+            font-family: 'SF Mono', 'Monaco', monospace;
+        }
+
+        /* Results */
+        .results-header {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .results-header.active {
+            display: flex;
+        }
+
+        .results-title {
+            font-family: 'Instrument Serif', Georgia, serif;
+            font-size: 1.75rem;
+            font-weight: 400;
+        }
+
+        .results-meta {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        .results-grid {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        /* Video card */
+        .video-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .video-card:hover {
+            border-color: var(--border);
+            transform: translateY(-2px);
+            box-shadow: 0 20px 40px -20px rgba(0, 0, 0, 0.5);
+        }
+
+        .video-header {
+            padding: 1.5rem;
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .video-thumbnail {
+            width: 120px;
+            height: 68px;
+            background: var(--bg-elevated);
+            border-radius: 8px;
+            flex-shrink: 0;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .video-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .video-thumbnail .play-icon {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.4);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .video-card:hover .play-icon {
+            opacity: 1;
+        }
+
+        .play-icon svg {
+            width: 32px;
+            height: 32px;
+            fill: white;
+        }
+
+        .video-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .video-title {
+            font-family: 'Instrument Serif', Georgia, serif;
+            font-size: 1.25rem;
+            font-weight: 400;
+            margin-bottom: 0.5rem;
+            line-height: 1.3;
+        }
+
+        .video-title a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .video-title a:hover {
+            color: var(--accent);
+        }
+
+        .video-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem 1rem;
+            font-size: 0.8125rem;
+            color: var(--text-muted);
+        }
+
+        .video-meta span {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .video-meta svg {
+            width: 14px;
+            height: 14px;
+            opacity: 0.7;
+        }
+
+        .video-status {
+            padding: 0.25rem 0.625rem;
+            border-radius: 100px;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .video-status.success {
+            background: rgba(48, 209, 88, 0.15);
+            color: var(--success);
+        }
+
+        .video-status.failed {
+            background: rgba(255, 59, 48, 0.15);
+            color: var(--accent);
+        }
+
+        .video-summary {
+            padding: 1.5rem;
+        }
+
+        .video-summary h4 {
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        .summary-content {
+            font-size: 0.9375rem;
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+
+        .summary-content p {
+            margin-bottom: 1rem;
+        }
+
+        .summary-content p:last-child {
+            margin-bottom: 0;
+        }
+
+        .summary-content ul, .summary-content ol {
+            margin: 1rem 0;
+            padding-left: 1.5rem;
+        }
+
+        .summary-content li {
+            margin-bottom: 0.5rem;
+        }
+
+        .summary-content strong {
+            color: var(--text-primary);
+        }
+
+        .summary-content h1, .summary-content h2, .summary-content h3 {
+            font-family: 'Instrument Serif', Georgia, serif;
+            font-weight: 400;
+            color: var(--text-primary);
+            margin: 1.5rem 0 0.75rem;
+        }
+
+        .summary-content h1 { font-size: 1.5rem; }
+        .summary-content h2 { font-size: 1.25rem; }
+        .summary-content h3 { font-size: 1.125rem; }
+
+        /* Settings Modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 480px;
+            max-height: 90vh;
+            overflow-y: auto;
+            transform: translateY(20px) scale(0.95);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .modal-overlay.active .modal {
+            transform: translateY(0) scale(1);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .modal-title {
+            font-family: 'Instrument Serif', Georgia, serif;
+            font-size: 1.5rem;
+            font-weight: 400;
+        }
+
+        .modal-close {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .modal-close:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .form-label .required {
+            color: var(--accent);
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.9375rem;
+            color: var(--text-primary);
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            transition: all 0.2s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .form-hint {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.375rem;
+        }
+
+        .modal-footer {
+            padding: 1.5rem;
+            border-top: 1px solid var(--border-subtle);
+            display: flex;
+            gap: 0.75rem;
+            justify-content: flex-end;
+        }
+
+        .btn-secondary {
+            padding: 0.75rem 1.25rem;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .btn-primary {
+            padding: 0.75rem 1.25rem;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            background: var(--accent);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary:hover {
+            background: #ff5246;
+        }
+
+        /* Toast */
+        .toast-container {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .toast {
+            padding: 1rem 1.25rem;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
+            animation: slideIn 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .toast.error {
+            border-color: var(--accent);
+            background: linear-gradient(135deg, var(--accent-soft), var(--bg-elevated));
+        }
+
+        .toast.success {
+            border-color: var(--success);
+            background: linear-gradient(135deg, rgba(48, 209, 88, 0.1), var(--bg-elevated));
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .container {
+                padding: 1rem 1rem 3rem;
+            }
+
+            header {
+                margin-bottom: 3rem;
+            }
+
+            .video-header {
+                flex-direction: column;
+            }
+
+            .video-thumbnail {
+                width: 100%;
+                height: auto;
+                aspect-ratio: 16/9;
+            }
+
+            .toast-container {
+                left: 1rem;
+                right: 1rem;
+                bottom: 1rem;
+            }
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 1.5rem;
+            opacity: 0.5;
+        }
+
+        .empty-state p {
+            font-size: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-bg"></div>
+
+    <div class="container">
+        <header>
+            <div class="logo">
+                <h1>Playlist Summarizer</h1>
+                <span class="logo-subtitle">YouTube • AI-Powered</span>
+            </div>
+            <button class="settings-btn" id="settingsBtn" aria-label="Settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"></path>
+                </svg>
+            </button>
+        </header>
+
+        <section class="hero" id="heroSection">
+            <div class="playlist-badge" id="playlistBadge">
+                <span class="dot"></span>
+                <span id="playlistStatus">No playlist configured</span>
+            </div>
+            <p class="hero-text">Transform your YouTube playlist into concise, AI-generated summaries. Save time by getting the key insights from multiple videos at once.</p>
+            <button class="action-btn" id="summarizeBtn">
+                <span>Summarize Recent Videos</span>
+            </button>
+        </section>
+
+        <section class="progress-section" id="progressSection">
+            <div class="spinner"></div>
+            <p class="progress-text" id="progressText">Initializing...</p>
+            <p class="progress-detail" id="progressDetail"></p>
+        </section>
+
+        <div class="results-header" id="resultsHeader">
+            <h2 class="results-title" id="resultsTitle">Summaries</h2>
+            <span class="results-meta" id="resultsMeta"></span>
+        </div>
+
+        <div class="results-grid" id="resultsGrid"></div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Settings</h3>
+                <button class="modal-close" id="modalClose">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">
+                        Playlist ID <span class="required">*</span>
+                    </label>
+                    <input type="text" class="form-input" id="playlistIdInput" placeholder="PLrAXtmErZgOeiKm4sg...">
+                    <p class="form-hint">Found in the playlist URL after "list="</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Hours Back</label>
+                    <input type="number" class="form-input" id="hoursBackInput" placeholder="168" value="168" min="1">
+                    <p class="form-hint">How far back to look for videos (default: 168 = 7 days)</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">
+                        YouTube API Key <span class="required">*</span>
+                    </label>
+                    <input type="password" class="form-input" id="youtubeKeyInput" placeholder="AIza...">
+                    <p class="form-hint">Get from Google Cloud Console</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">
+                        Claude API Key <span class="required">*</span>
+                    </label>
+                    <input type="password" class="form-input" id="claudeKeyInput" placeholder="sk-ant-...">
+                    <p class="form-hint">Get from console.anthropic.com</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="cancelBtn">Cancel</button>
+                <button class="btn-primary" id="saveBtn">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+        // Storage keys
+        const STORAGE_KEYS = {
+            playlistId: 'yps_playlist_id',
+            hoursBack: 'yps_hours_back',
+            youtubeKey: 'yps_youtube_key',
+            claudeKey: 'yps_claude_key'
+        };
+
+        // DOM Elements
+        const elements = {
+            settingsBtn: document.getElementById('settingsBtn'),
+            modalOverlay: document.getElementById('modalOverlay'),
+            modalClose: document.getElementById('modalClose'),
+            cancelBtn: document.getElementById('cancelBtn'),
+            saveBtn: document.getElementById('saveBtn'),
+            summarizeBtn: document.getElementById('summarizeBtn'),
+            playlistBadge: document.getElementById('playlistBadge'),
+            playlistStatus: document.getElementById('playlistStatus'),
+            progressSection: document.getElementById('progressSection'),
+            progressText: document.getElementById('progressText'),
+            progressDetail: document.getElementById('progressDetail'),
+            heroSection: document.getElementById('heroSection'),
+            resultsHeader: document.getElementById('resultsHeader'),
+            resultsTitle: document.getElementById('resultsTitle'),
+            resultsMeta: document.getElementById('resultsMeta'),
+            resultsGrid: document.getElementById('resultsGrid'),
+            toastContainer: document.getElementById('toastContainer'),
+            // Inputs
+            playlistIdInput: document.getElementById('playlistIdInput'),
+            hoursBackInput: document.getElementById('hoursBackInput'),
+            youtubeKeyInput: document.getElementById('youtubeKeyInput'),
+            claudeKeyInput: document.getElementById('claudeKeyInput')
+        };
+
+        // Load settings from localStorage
+        function loadSettings() {
+            const settings = {
+                playlistId: localStorage.getItem(STORAGE_KEYS.playlistId) || '',
+                hoursBack: localStorage.getItem(STORAGE_KEYS.hoursBack) || '168',
+                youtubeKey: localStorage.getItem(STORAGE_KEYS.youtubeKey) || '',
+                claudeKey: localStorage.getItem(STORAGE_KEYS.claudeKey) || ''
+            };
+
+            elements.playlistIdInput.value = settings.playlistId;
+            elements.hoursBackInput.value = settings.hoursBack;
+            elements.youtubeKeyInput.value = settings.youtubeKey;
+            elements.claudeKeyInput.value = settings.claudeKey;
+
+            updatePlaylistBadge(settings.playlistId);
+            return settings;
+        }
+
+        // Save settings to localStorage
+        function saveSettings() {
+            const playlistId = elements.playlistIdInput.value.trim();
+            const hoursBack = elements.hoursBackInput.value || '168';
+            const youtubeKey = elements.youtubeKeyInput.value.trim();
+            const claudeKey = elements.claudeKeyInput.value.trim();
+
+            if (!playlistId || !youtubeKey || !claudeKey) {
+                showToast('Please fill in all required fields', 'error');
+                return false;
+            }
+
+            localStorage.setItem(STORAGE_KEYS.playlistId, playlistId);
+            localStorage.setItem(STORAGE_KEYS.hoursBack, hoursBack);
+            localStorage.setItem(STORAGE_KEYS.youtubeKey, youtubeKey);
+            localStorage.setItem(STORAGE_KEYS.claudeKey, claudeKey);
+
+            updatePlaylistBadge(playlistId);
+            showToast('Settings saved successfully', 'success');
+            return true;
+        }
+
+        // Update playlist badge
+        function updatePlaylistBadge(playlistId) {
+            if (playlistId) {
+                elements.playlistBadge.classList.add('configured');
+                elements.playlistStatus.textContent = `Playlist: ${playlistId.substring(0, 20)}...`;
+            } else {
+                elements.playlistBadge.classList.remove('configured');
+                elements.playlistStatus.textContent = 'No playlist configured';
+            }
+        }
+
+        // Show toast notification
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    ${type === 'error'
+                        ? '<circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line>'
+                        : '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>'
+                    }
+                </svg>
+                ${message}
+            `;
+            elements.toastContainer.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(20px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // Open/close modal
+        function openModal() {
+            loadSettings();
+            elements.modalOverlay.classList.add('active');
+        }
+
+        function closeModal() {
+            elements.modalOverlay.classList.remove('active');
+        }
+
+        // Create video card HTML
+        function createVideoCard(video) {
+            const publishedDate = new Date(video.publishedAt).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+
+            const summaryHtml = marked.parse(video.summary || 'No summary available');
+            const thumbnailUrl = `https://img.youtube.com/vi/${video.videoId}/mqdefault.jpg`;
+
+            return `
+                <article class="video-card">
+                    <div class="video-header">
+                        <a href="https://www.youtube.com/watch?v=${video.videoId}" target="_blank" class="video-thumbnail">
+                            <img src="${thumbnailUrl}" alt="${video.title}" loading="lazy">
+                            <div class="play-icon">
+                                <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                            </div>
+                        </a>
+                        <div class="video-info">
+                            <h3 class="video-title">
+                                <a href="https://www.youtube.com/watch?v=${video.videoId}" target="_blank">
+                                    ${video.title}
+                                </a>
+                            </h3>
+                            <div class="video-meta">
+                                <span>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                        <circle cx="12" cy="7" r="4"></circle>
+                                    </svg>
+                                    ${video.channel}
+                                </span>
+                                <span>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                                    </svg>
+                                    ${publishedDate}
+                                </span>
+                                <span class="video-status ${video.status}">${video.status}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="video-summary">
+                        <h4>Summary</h4>
+                        <div class="summary-content">${summaryHtml}</div>
+                    </div>
+                </article>
+            `;
+        }
+
+        // Update progress
+        function updateProgress(text, detail = '') {
+            elements.progressText.textContent = text;
+            elements.progressDetail.textContent = detail;
+        }
+
+        // Summarize playlist
+        async function summarizePlaylist() {
+            const settings = {
+                playlistId: localStorage.getItem(STORAGE_KEYS.playlistId),
+                hoursBack: parseInt(localStorage.getItem(STORAGE_KEYS.hoursBack)) || 168,
+                youtubeApiKey: localStorage.getItem(STORAGE_KEYS.youtubeKey),
+                claudeApiKey: localStorage.getItem(STORAGE_KEYS.claudeKey)
+            };
+
+            if (!settings.playlistId || !settings.youtubeApiKey || !settings.claudeApiKey) {
+                showToast('Please configure your settings first', 'error');
+                openModal();
+                return;
+            }
+
+            // Show progress
+            elements.summarizeBtn.disabled = true;
+            elements.progressSection.classList.add('active');
+            elements.resultsHeader.classList.remove('active');
+            elements.resultsGrid.innerHTML = '';
+
+            updateProgress('Connecting to API...');
+
+            try {
+                const response = await fetch('/.netlify/functions/summarize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings)
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to summarize playlist');
+                }
+
+                const data = await response.json();
+
+                // Hide progress, show results
+                elements.progressSection.classList.remove('active');
+                elements.resultsHeader.classList.add('active');
+
+                if (data.playlistTitle) {
+                    elements.resultsTitle.textContent = data.playlistTitle;
+                }
+
+                const successCount = data.videos.filter(v => v.status === 'success').length;
+                elements.resultsMeta.textContent = `${successCount} of ${data.videos.length} videos summarized`;
+
+                // Render video cards
+                elements.resultsGrid.innerHTML = data.videos.map(createVideoCard).join('');
+
+                showToast(`Successfully processed ${data.videos.length} videos`, 'success');
+
+            } catch (error) {
+                console.error('Error:', error);
+                showToast(error.message, 'error');
+                elements.progressSection.classList.remove('active');
+            } finally {
+                elements.summarizeBtn.disabled = false;
+            }
+        }
+
+        // Event listeners
+        elements.settingsBtn.addEventListener('click', openModal);
+        elements.modalClose.addEventListener('click', closeModal);
+        elements.cancelBtn.addEventListener('click', closeModal);
+        elements.modalOverlay.addEventListener('click', (e) => {
+            if (e.target === elements.modalOverlay) closeModal();
+        });
+        elements.saveBtn.addEventListener('click', () => {
+            if (saveSettings()) closeModal();
+        });
+        elements.summarizeBtn.addEventListener('click', summarizePlaylist);
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            const settings = loadSettings();
+            // Open settings modal if not configured
+            if (!settings.playlistId || !settings.youtubeKey || !settings.claudeKey) {
+                setTimeout(openModal, 500);
+            }
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && elements.modalOverlay.classList.contains('active')) {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>
