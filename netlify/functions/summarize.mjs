@@ -1,7 +1,5 @@
 // Netlify serverless function for YouTube Playlist Summarizer
-// Uses YouTube Data API, Supadata SDK for transcripts, and Claude API for summaries
-
-import { Supadata } from '@supadata/js';
+// Uses YouTube Data API, TranscriptAPI for transcripts, and Claude API for summaries
 
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com';
@@ -14,24 +12,33 @@ const headers = {
   'Content-Type': 'application/json'
 };
 
-// Fetch transcript using Supadata SDK
-async function fetchTranscript(videoId, supadataApiKey) {
-  const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
-  const supadata = new Supadata({ apiKey: supadataApiKey });
-
-  const result = await supadata.transcript({
-    url: videoUrl,
-    text: true
+// Fetch transcript using TranscriptAPI
+async function fetchTranscript(videoId, transcriptApiKey) {
+  const params = new URLSearchParams({
+    video_url: videoId,
+    format: 'text',
+    include_timestamp: 'false',
+    send_metadata: 'true'
   });
 
-  // Check if we got a job ID (async processing) - not supported in quick mode
-  if ('jobId' in result) {
-    throw new Error('Transcript requires async processing - not supported');
+  const response = await fetch(
+    `https://transcriptapi.com/api/v2/youtube/transcript?${params.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${transcriptApiKey}`
+      }
+    }
+  );
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || `Transcript API error: ${response.status}`);
   }
 
-  if (result.content) {
-    return result.content;
+  const data = await response.json();
+
+  if (data.transcript) {
+    return data.transcript;
   }
 
   throw new Error('No transcript available');
@@ -195,18 +202,18 @@ export async function handler(event) {
 
     // ACTION: PROCESS - Process a single video
     if (action === 'process') {
-      const { video, claudeApiKey, claudeBaseUrl, supadataApiKey } = body;
+      const { video, claudeApiKey, claudeBaseUrl, transcriptApiKey } = body;
 
-      if (!video || !claudeApiKey || !supadataApiKey) {
+      if (!video || !claudeApiKey || !transcriptApiKey) {
         return {
           statusCode: 400,
           headers,
-          body: JSON.stringify({ error: 'Missing video, claudeApiKey, or supadataApiKey' })
+          body: JSON.stringify({ error: 'Missing video, claudeApiKey, or transcriptApiKey' })
         };
       }
 
       try {
-        const transcript = await fetchTranscript(video.videoId, supadataApiKey);
+        const transcript = await fetchTranscript(video.videoId, transcriptApiKey);
         const summary = await summarizeTranscript(transcript, video.title, claudeApiKey, claudeBaseUrl);
 
         return {
