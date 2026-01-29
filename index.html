@@ -15,7 +15,7 @@
             box-sizing: border-box;
         }
 
-        :root {
+        :root, [data-theme="dark"] {
             --bg-deep: #0a0a0b;
             --bg-surface: #111113;
             --bg-elevated: #1a1a1d;
@@ -31,6 +31,24 @@
             --success: #30d158;
             --warning: #ffd60a;
             --gradient-spotlight: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255, 59, 48, 0.15), transparent);
+        }
+
+        [data-theme="light"] {
+            --bg-deep: #f5f5f7;
+            --bg-surface: #ffffff;
+            --bg-elevated: #f0f0f2;
+            --bg-hover: #e8e8ea;
+            --border: #d1d1d6;
+            --border-subtle: #e5e5ea;
+            --text-primary: #1d1d1f;
+            --text-secondary: #6e6e73;
+            --text-muted: #8e8e93;
+            --accent: #ff3b30;
+            --accent-glow: rgba(255, 59, 48, 0.3);
+            --accent-soft: rgba(255, 59, 48, 0.08);
+            --success: #28a745;
+            --warning: #ffcc00;
+            --gradient-spotlight: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255, 59, 48, 0.08), transparent);
         }
 
         html {
@@ -134,6 +152,91 @@
         .settings-btn svg {
             width: 22px;
             height: 22px;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .theme-toggle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .theme-toggle:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border-color: var(--text-muted);
+        }
+
+        .theme-toggle svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .theme-toggle .sun-icon { display: none; }
+        .theme-toggle .moon-icon { display: block; }
+
+        [data-theme="light"] .theme-toggle .sun-icon { display: block; }
+        [data-theme="light"] .theme-toggle .moon-icon { display: none; }
+
+        /* Config action buttons */
+        .config-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-right: auto;
+        }
+
+        .config-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .config-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border-color: var(--text-muted);
+        }
+
+        .config-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .config-btn[title]:hover::after {
+            content: attr(title);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 0.25rem 0.5rem;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            z-index: 10;
         }
 
         /* Hero section */
@@ -737,12 +840,30 @@
                 <h1>Playlist Summarizer</h1>
                 <span class="logo-subtitle">YouTube • AI-Powered</span>
             </div>
-            <button class="settings-btn" id="settingsBtn" aria-label="Settings">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="3"></circle>
-                    <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"></path>
-                </svg>
-            </button>
+            <div class="header-controls">
+                <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+                    <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                    <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                </button>
+                <button class="settings-btn" id="settingsBtn" aria-label="Settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"></path>
+                    </svg>
+                </button>
+            </div>
         </header>
 
         <section class="hero" id="heroSection">
@@ -823,6 +944,22 @@
                 </div>
             </div>
             <div class="modal-footer">
+                <div class="config-actions">
+                    <button class="config-btn" id="exportConfigBtn" title="Export config to JSON">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                    </button>
+                    <button class="config-btn" id="importConfigBtn" title="Import config from clipboard">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                    </button>
+                </div>
                 <button class="btn-secondary" id="cancelBtn">Cancel</button>
                 <button class="btn-primary" id="saveBtn">Save Settings</button>
             </div>
@@ -839,12 +976,16 @@
             youtubeKey: 'yps_youtube_key',
             claudeKey: 'yps_claude_key',
             claudeBaseUrl: 'yps_claude_base_url',
-            supadataKey: 'yps_supadata_key'
+            supadataKey: 'yps_supadata_key',
+            theme: 'yps_theme'
         };
 
         // DOM Elements
         const elements = {
             settingsBtn: document.getElementById('settingsBtn'),
+            themeToggle: document.getElementById('themeToggle'),
+            exportConfigBtn: document.getElementById('exportConfigBtn'),
+            importConfigBtn: document.getElementById('importConfigBtn'),
             modalOverlay: document.getElementById('modalOverlay'),
             modalClose: document.getElementById('modalClose'),
             cancelBtn: document.getElementById('cancelBtn'),
@@ -926,6 +1067,100 @@
             } else {
                 elements.playlistBadge.classList.remove('configured');
                 elements.playlistStatus.textContent = 'No playlist configured';
+            }
+        }
+
+        // Theme toggle
+        function initTheme() {
+            const savedTheme = localStorage.getItem(STORAGE_KEYS.theme) || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
+
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem(STORAGE_KEYS.theme, newTheme);
+        }
+
+        // Export config to JSON
+        function exportConfig() {
+            const config = {
+                playlistId: localStorage.getItem(STORAGE_KEYS.playlistId) || '',
+                hoursBack: localStorage.getItem(STORAGE_KEYS.hoursBack) || '168',
+                youtubeKey: localStorage.getItem(STORAGE_KEYS.youtubeKey) || '',
+                claudeKey: localStorage.getItem(STORAGE_KEYS.claudeKey) || '',
+                claudeBaseUrl: localStorage.getItem(STORAGE_KEYS.claudeBaseUrl) || '',
+                supadataKey: localStorage.getItem(STORAGE_KEYS.supadataKey) || ''
+            };
+
+            const jsonString = JSON.stringify(config, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'playlist-summarizer-config.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            showToast('Config exported successfully', 'success');
+        }
+
+        // Import config from clipboard
+        async function importConfig() {
+            try {
+                const text = await navigator.clipboard.readText();
+                let config;
+
+                try {
+                    config = JSON.parse(text);
+                } catch (e) {
+                    showToast('Invalid JSON format in clipboard', 'error');
+                    return;
+                }
+
+                // Validate config structure
+                const validKeys = ['playlistId', 'hoursBack', 'youtubeKey', 'claudeKey', 'claudeBaseUrl', 'supadataKey'];
+                const hasValidKey = validKeys.some(key => key in config);
+
+                if (!hasValidKey) {
+                    showToast('Invalid config format: no recognized fields', 'error');
+                    return;
+                }
+
+                // Import valid fields
+                if (config.playlistId !== undefined) {
+                    localStorage.setItem(STORAGE_KEYS.playlistId, config.playlistId);
+                }
+                if (config.hoursBack !== undefined) {
+                    localStorage.setItem(STORAGE_KEYS.hoursBack, String(config.hoursBack));
+                }
+                if (config.youtubeKey !== undefined) {
+                    localStorage.setItem(STORAGE_KEYS.youtubeKey, config.youtubeKey);
+                }
+                if (config.claudeKey !== undefined) {
+                    localStorage.setItem(STORAGE_KEYS.claudeKey, config.claudeKey);
+                }
+                if (config.claudeBaseUrl !== undefined) {
+                    localStorage.setItem(STORAGE_KEYS.claudeBaseUrl, config.claudeBaseUrl);
+                }
+                if (config.supadataKey !== undefined) {
+                    localStorage.setItem(STORAGE_KEYS.supadataKey, config.supadataKey);
+                }
+
+                // Reload settings in the form
+                loadSettings();
+                showToast('Config imported successfully', 'success');
+
+            } catch (e) {
+                if (e.name === 'NotAllowedError') {
+                    showToast('Clipboard access denied. Please allow clipboard permissions.', 'error');
+                } else {
+                    showToast('Failed to read clipboard', 'error');
+                }
             }
         }
 
@@ -1134,6 +1369,9 @@
 
         // Event listeners
         elements.settingsBtn.addEventListener('click', openModal);
+        elements.themeToggle.addEventListener('click', toggleTheme);
+        elements.exportConfigBtn.addEventListener('click', exportConfig);
+        elements.importConfigBtn.addEventListener('click', importConfig);
         elements.modalClose.addEventListener('click', closeModal);
         elements.cancelBtn.addEventListener('click', closeModal);
         elements.modalOverlay.addEventListener('click', (e) => {
@@ -1145,6 +1383,8 @@
         elements.summarizeBtn.addEventListener('click', summarizePlaylist);
 
         // Initialize
+        initTheme(); // Apply theme immediately to prevent flash
+
         document.addEventListener('DOMContentLoaded', () => {
             const settings = loadSettings();
             // Open settings modal if not configured
