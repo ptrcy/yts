@@ -5,12 +5,6 @@
 [functions]
   node_bundler = "esbuild"
 
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-  conditions = {Role = ["admin"]}
-
 # Increase function timeout for processing multiple videos
 [functions."summarize"]
   timeout = 300
