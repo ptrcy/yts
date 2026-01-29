@@ -1,101 +1,84 @@
 // Netlify serverless function for YouTube Playlist Summarizer
-// Uses YouTube Data API and Claude API to fetch and summarize videos
+// Uses YouTube Data API, Supadata API for transcripts, and Claude API for summaries
 
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
+const SUPADATA_API_BASE = 'https://api.supadata.ai/v1';
+const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com';
 
-// Helper to fetch YouTube transcript using innertube API
-async function fetchTranscript(videoId) {
+// Fetch transcript using Supadata API
+async function fetchTranscript(videoId, supadataApiKey) {
+  const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
   try {
-    // First, get the video page to extract necessary tokens
-    const videoPageResponse = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+    // Request transcript from Supadata
+    const response = await fetch(`${SUPADATA_API_BASE}/youtube/transcript`, {
+      method: 'POST',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept-Language': 'en-US,en;q=0.9'
-      }
+        'Content-Type': 'application/json',
+        'x-api-key': supadataApiKey
+      },
+      body: JSON.stringify({
+        url: videoUrl,
+        text: true,
+        mode: 'auto'
+      })
     });
 
-    if (!videoPageResponse.ok) {
-      throw new Error('Failed to fetch video page');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Supadata error for ${videoId}: ${response.status} - ${errorText}`);
+      return null;
     }
 
-    const html = await videoPageResponse.text();
+    const data = await response.json();
 
-    // Extract the captions track URL from the page
-    const captionTrackMatch = html.match(/"captionTracks":\s*(\[.*?\])/);
-    if (!captionTrackMatch) {
-      // Try alternative pattern for caption data
-      const playerResponseMatch = html.match(/ytInitialPlayerResponse\s*=\s*({.+?});/);
-      if (playerResponseMatch) {
-        try {
-          const playerResponse = JSON.parse(playerResponseMatch[1]);
-          const captions = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
-          if (captions && captions.length > 0) {
-            // Prefer English, then any available
-            const track = captions.find(t => t.languageCode?.startsWith('en')) || captions[0];
-            const captionUrl = track.baseUrl;
+    // Check if we got immediate content
+    if (data.content) {
+      return data.content;
+    }
 
-            const captionResponse = await fetch(captionUrl);
-            if (captionResponse.ok) {
-              const captionXml = await captionResponse.text();
-              // Parse XML transcript
-              const textMatches = captionXml.matchAll(/<text[^>]*>([^<]*)<\/text>/g);
-              const texts = [];
-              for (const match of textMatches) {
-                const text = match[1]
-                  .replace(/&amp;/g, '&')
-                  .replace(/&lt;/g, '<')
-                  .replace(/&gt;/g, '>')
-                  .replace(/&quot;/g, '"')
-                  .replace(/&#39;/g, "'")
-                  .replace(/\n/g, ' ')
-                  .trim();
-                if (text) texts.push(text);
-              }
-              if (texts.length > 0) {
-                return texts.join(' ');
-              }
-            }
+    // Check if it's a batch job that needs polling
+    if (data.job_id) {
+      console.log(`Supadata async job started for ${videoId}: ${data.job_id}`);
+
+      // Poll for results (max 20 attempts, 5 seconds apart)
+      for (let i = 0; i < 20; i++) {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        const batchResponse = await fetch(`${SUPADATA_API_BASE}/youtube/batch/${data.job_id}`, {
+          headers: {
+            'x-api-key': supadataApiKey
           }
-        } catch (e) {
-          console.error('Failed to parse player response:', e);
+        });
+
+        if (!batchResponse.ok) {
+          continue;
+        }
+
+        const batchData = await batchResponse.json();
+
+        if (batchData.status === 'completed') {
+          return batchData.result?.content || batchData.content || null;
+        }
+
+        if (batchData.status === 'failed') {
+          console.error(`Supadata batch job failed for ${videoId}: ${batchData.error}`);
+          return null;
         }
       }
+
+      console.error(`Supadata timeout waiting for transcript: ${videoId}`);
       return null;
     }
 
-    const captionTracks = JSON.parse(captionTrackMatch[1]);
-    if (!captionTracks || captionTracks.length === 0) {
-      return null;
+    // Fallback: check for other response formats
+    if (typeof data === 'string') {
+      return data;
     }
 
-    // Prefer English transcript
-    const englishTrack = captionTracks.find(t => t.languageCode?.startsWith('en'));
-    const track = englishTrack || captionTracks[0];
-    const captionUrl = track.baseUrl;
+    console.error(`Unexpected Supadata response format for ${videoId}`);
+    return null;
 
-    const captionResponse = await fetch(captionUrl);
-    if (!captionResponse.ok) {
-      return null;
-    }
-
-    const captionXml = await captionResponse.text();
-
-    // Parse XML transcript
-    const textMatches = captionXml.matchAll(/<text[^>]*>([^<]*)<\/text>/g);
-    const texts = [];
-    for (const match of textMatches) {
-      const text = match[1]
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/\n/g, ' ')
-        .trim();
-      if (text) texts.push(text);
-    }
-
-    return texts.length > 0 ? texts.join(' ') : null;
   } catch (error) {
     console.error(`Error fetching transcript for ${videoId}:`, error);
     return null;
@@ -168,7 +151,9 @@ async function getRecentVideos(playlistId, apiKey, hoursBack) {
 }
 
 // Summarize transcript using Claude
-async function summarizeTranscript(transcript, title, claudeApiKey) {
+async function summarizeTranscript(transcript, title, claudeApiKey, claudeBaseUrl) {
+  const baseUrl = claudeBaseUrl || DEFAULT_CLAUDE_BASE_URL;
+
   const prompt = `Please provide a comprehensive summary of this YouTube video transcript in Markdown format.
 Focus on the main points, key takeaways, and important details.
 Use bullet points, headers, and formatting to make the summary easy to read.
@@ -178,7 +163,7 @@ Video Title: ${title}
 Transcript:
 ${transcript.substring(0, 50000)}`; // Limit transcript length
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch(`${baseUrl}/v1/messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -213,10 +198,10 @@ ${transcript.substring(0, 50000)}`; // Limit transcript length
 }
 
 // Process a single video
-async function processVideo(video, claudeApiKey) {
+async function processVideo(video, claudeApiKey, claudeBaseUrl, supadataApiKey) {
   console.log(`Processing: ${video.title}`);
 
-  const transcript = await fetchTranscript(video.videoId);
+  const transcript = await fetchTranscript(video.videoId, supadataApiKey);
 
   if (!transcript) {
     return {
@@ -229,7 +214,7 @@ async function processVideo(video, claudeApiKey) {
   console.log(`  Got transcript (${transcript.length} chars)`);
 
   try {
-    const summary = await summarizeTranscript(transcript, video.title, claudeApiKey);
+    const summary = await summarizeTranscript(transcript, video.title, claudeApiKey, claudeBaseUrl);
     console.log(`  Summary generated`);
 
     return {
@@ -271,10 +256,17 @@ export async function handler(event) {
   }
 
   try {
-    const { playlistId, hoursBack, youtubeApiKey, claudeApiKey } = JSON.parse(event.body);
+    const {
+      playlistId,
+      hoursBack,
+      youtubeApiKey,
+      claudeApiKey,
+      claudeBaseUrl,
+      supadataApiKey
+    } = JSON.parse(event.body);
 
     // Validate inputs
-    if (!playlistId || !youtubeApiKey || !claudeApiKey) {
+    if (!playlistId || !youtubeApiKey || !claudeApiKey || !supadataApiKey) {
       return {
         statusCode: 400,
         headers,
@@ -309,7 +301,7 @@ export async function handler(event) {
     // Process videos (sequentially to avoid rate limits)
     const results = [];
     for (const video of videos) {
-      const result = await processVideo(video, claudeApiKey);
+      const result = await processVideo(video, claudeApiKey, claudeBaseUrl, supadataApiKey);
       results.push(result);
     }
 

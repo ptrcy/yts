@@ -809,6 +809,18 @@
                     <input type="password" class="form-input" id="claudeKeyInput" placeholder="sk-ant-...">
                     <p class="form-hint">Get from console.anthropic.com</p>
                 </div>
+                <div class="form-group">
+                    <label class="form-label">Claude API Base URL</label>
+                    <input type="text" class="form-input" id="claudeBaseUrlInput" placeholder="https://api.anthropic.com">
+                    <p class="form-hint">Optional: Custom API endpoint (leave empty for default Anthropic)</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">
+                        Supadata API Key <span class="required">*</span>
+                    </label>
+                    <input type="password" class="form-input" id="supadataKeyInput" placeholder="your-supadata-key">
+                    <p class="form-hint">For fetching YouTube transcripts (supadata.ai)</p>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" id="cancelBtn">Cancel</button>
@@ -825,7 +837,9 @@
             playlistId: 'yps_playlist_id',
             hoursBack: 'yps_hours_back',
             youtubeKey: 'yps_youtube_key',
-            claudeKey: 'yps_claude_key'
+            claudeKey: 'yps_claude_key',
+            claudeBaseUrl: 'yps_claude_base_url',
+            supadataKey: 'yps_supadata_key'
         };
 
         // DOM Elements
@@ -851,7 +865,9 @@
             playlistIdInput: document.getElementById('playlistIdInput'),
             hoursBackInput: document.getElementById('hoursBackInput'),
             youtubeKeyInput: document.getElementById('youtubeKeyInput'),
-            claudeKeyInput: document.getElementById('claudeKeyInput')
+            claudeKeyInput: document.getElementById('claudeKeyInput'),
+            claudeBaseUrlInput: document.getElementById('claudeBaseUrlInput'),
+            supadataKeyInput: document.getElementById('supadataKeyInput')
         };
 
         // Load settings from localStorage
@@ -860,13 +876,17 @@
                 playlistId: localStorage.getItem(STORAGE_KEYS.playlistId) || '',
                 hoursBack: localStorage.getItem(STORAGE_KEYS.hoursBack) || '168',
                 youtubeKey: localStorage.getItem(STORAGE_KEYS.youtubeKey) || '',
-                claudeKey: localStorage.getItem(STORAGE_KEYS.claudeKey) || ''
+                claudeKey: localStorage.getItem(STORAGE_KEYS.claudeKey) || '',
+                claudeBaseUrl: localStorage.getItem(STORAGE_KEYS.claudeBaseUrl) || '',
+                supadataKey: localStorage.getItem(STORAGE_KEYS.supadataKey) || ''
             };
 
             elements.playlistIdInput.value = settings.playlistId;
             elements.hoursBackInput.value = settings.hoursBack;
             elements.youtubeKeyInput.value = settings.youtubeKey;
             elements.claudeKeyInput.value = settings.claudeKey;
+            elements.claudeBaseUrlInput.value = settings.claudeBaseUrl;
+            elements.supadataKeyInput.value = settings.supadataKey;
 
             updatePlaylistBadge(settings.playlistId);
             return settings;
@@ -878,8 +898,10 @@
             const hoursBack = elements.hoursBackInput.value || '168';
             const youtubeKey = elements.youtubeKeyInput.value.trim();
             const claudeKey = elements.claudeKeyInput.value.trim();
+            const claudeBaseUrl = elements.claudeBaseUrlInput.value.trim();
+            const supadataKey = elements.supadataKeyInput.value.trim();
 
-            if (!playlistId || !youtubeKey || !claudeKey) {
+            if (!playlistId || !youtubeKey || !claudeKey || !supadataKey) {
                 showToast('Please fill in all required fields', 'error');
                 return false;
             }
@@ -888,6 +910,8 @@
             localStorage.setItem(STORAGE_KEYS.hoursBack, hoursBack);
             localStorage.setItem(STORAGE_KEYS.youtubeKey, youtubeKey);
             localStorage.setItem(STORAGE_KEYS.claudeKey, claudeKey);
+            localStorage.setItem(STORAGE_KEYS.claudeBaseUrl, claudeBaseUrl);
+            localStorage.setItem(STORAGE_KEYS.supadataKey, supadataKey);
 
             updatePlaylistBadge(playlistId);
             showToast('Settings saved successfully', 'success');
@@ -1004,10 +1028,12 @@
                 playlistId: localStorage.getItem(STORAGE_KEYS.playlistId),
                 hoursBack: parseInt(localStorage.getItem(STORAGE_KEYS.hoursBack)) || 168,
                 youtubeApiKey: localStorage.getItem(STORAGE_KEYS.youtubeKey),
-                claudeApiKey: localStorage.getItem(STORAGE_KEYS.claudeKey)
+                claudeApiKey: localStorage.getItem(STORAGE_KEYS.claudeKey),
+                claudeBaseUrl: localStorage.getItem(STORAGE_KEYS.claudeBaseUrl) || '',
+                supadataApiKey: localStorage.getItem(STORAGE_KEYS.supadataKey)
             };
 
-            if (!settings.playlistId || !settings.youtubeApiKey || !settings.claudeApiKey) {
+            if (!settings.playlistId || !settings.youtubeApiKey || !settings.claudeApiKey || !settings.supadataApiKey) {
                 showToast('Please configure your settings first', 'error');
                 openModal();
                 return;
@@ -1076,7 +1102,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             const settings = loadSettings();
             // Open settings modal if not configured
-            if (!settings.playlistId || !settings.youtubeKey || !settings.claudeKey) {
+            if (!settings.playlistId || !settings.youtubeKey || !settings.claudeKey || !settings.supadataKey) {
                 setTimeout(openModal, 500);
             }
         });
