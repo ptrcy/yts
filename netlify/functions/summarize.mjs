@@ -38,7 +38,10 @@ async function fetchTranscript(videoId, transcriptApiKey) {
   const data = await response.json();
 
   if (data.transcript) {
-    return data.transcript;
+    return {
+      text: data.transcript,
+      language: data.language || null
+    };
   }
 
   throw new Error('No transcript available');
@@ -110,15 +113,27 @@ async function getRecentVideos(playlistId, apiKey, hoursBack) {
   return videos;
 }
 
+// Languages that should keep their original language in summaries
+const NATIVE_LANGUAGE_NAMES = {
+  fr: 'French',
+  es: 'Spanish',
+  ar: 'Arabic'
+};
+
 // Summarize transcript using Claude
-async function summarizeTranscript(transcript, title, claudeApiKey, claudeBaseUrl) {
+async function summarizeTranscript(transcript, title, claudeApiKey, claudeBaseUrl, language) {
   const baseUrl = claudeBaseUrl || DEFAULT_CLAUDE_BASE_URL;
 
-  const prompt = `Please provide a comprehensive summary of this YouTube video transcript in Markdown format.
+  const nativeLang = NATIVE_LANGUAGE_NAMES[language];
+  const langInstruction = nativeLang
+    ? `IMPORTANT: Write your entire summary in ${nativeLang}. Do NOT translate to English.`
+    : '';
+
+  const prompt = `${langInstruction}
+
+Please provide a comprehensive summary of this YouTube video transcript in Markdown format.
 Focus on the main points, key takeaways, and important details.
 Use bullet points, headers, and formatting to make the summary easy to read.
-
-Language instructions: If the transcript is in French, Spanish, or Arabic, write the summary in that same language. Otherwise, write the summary in English.
 
 Video Title: ${title}
 
@@ -213,8 +228,8 @@ export async function handler(event) {
       }
 
       try {
-        const transcript = await fetchTranscript(video.videoId, transcriptApiKey);
-        const summary = await summarizeTranscript(transcript, video.title, claudeApiKey, claudeBaseUrl);
+        const { text: transcript, language } = await fetchTranscript(video.videoId, transcriptApiKey);
+        const summary = await summarizeTranscript(transcript, video.title, claudeApiKey, claudeBaseUrl, language);
 
         return {
           statusCode: 200,
@@ -222,6 +237,7 @@ export async function handler(event) {
           body: JSON.stringify({
             ...video,
             summary,
+            language,
             status: 'success'
           })
         };

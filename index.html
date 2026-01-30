@@ -584,6 +584,13 @@
             opacity: 1;
         }
 
+        /* Always show delete button on touch devices (no hover capability) */
+        @media (hover: none) {
+            .delete-btn {
+                opacity: 0.7;
+            }
+        }
+
         .delete-btn:hover {
             background: rgba(255, 59, 48, 0.15);
             color: var(--accent);
@@ -644,6 +651,18 @@
         .summary-content h1 { font-size: 1.5rem; }
         .summary-content h2 { font-size: 1.25rem; }
         .summary-content h3 { font-size: 1.125rem; }
+
+        /* RTL support for Arabic */
+        .summary-content.rtl {
+            direction: rtl;
+            text-align: right;
+        }
+
+        .summary-content.rtl ul,
+        .summary-content.rtl ol {
+            padding-left: 0;
+            padding-right: 1.5rem;
+        }
 
         /* Settings Modal */
         .modal-overlay {
@@ -1000,14 +1019,14 @@
                     <label class="form-label">
                         YouTube API Key <span class="required">*</span>
                     </label>
-                    <input type="password" class="form-input" id="youtubeKeyInput" placeholder="AIza...">
+                    <input type="password" class="form-input" id="youtubeKeyInput" placeholder="AIza..." autocomplete="off">
                     <p class="form-hint">Get from Google Cloud Console</p>
                 </div>
                 <div class="form-group">
                     <label class="form-label">
                         Claude API Key <span class="required">*</span>
                     </label>
-                    <input type="password" class="form-input" id="claudeKeyInput" placeholder="sk-ant-...">
+                    <input type="password" class="form-input" id="claudeKeyInput" placeholder="sk-ant-..." autocomplete="off">
                     <p class="form-hint">Get from console.anthropic.com</p>
                 </div>
                 <div class="form-group">
@@ -1019,7 +1038,7 @@
                     <label class="form-label">
                         Transcript API Key <span class="required">*</span>
                     </label>
-                    <input type="password" class="form-input" id="transcriptKeyInput" placeholder="your-transcript-api-key">
+                    <input type="password" class="form-input" id="transcriptKeyInput" placeholder="your-transcript-api-key" autocomplete="off">
                     <p class="form-hint">For fetching YouTube transcripts (transcriptapi.com)</p>
                 </div>
             </div>
@@ -1292,6 +1311,7 @@
             const summaryWithUnicode = latexAllToUnicode(video.summary || 'No summary available');
             const summaryHtml = marked.parse(summaryWithUnicode);
             const thumbnailUrl = `https://img.youtube.com/vi/${video.videoId}/mqdefault.jpg`;
+            const isRtl = video.language === 'ar';
 
             return `
                 <article class="video-card" data-video-id="${video.videoId}">
@@ -1338,7 +1358,7 @@
                     </div>
                     <div class="video-summary">
                         <h4>Summary</h4>
-                        <div class="summary-content">${summaryHtml}</div>
+                        <div class="summary-content${isRtl ? ' rtl' : ''}">${summaryHtml}</div>
                     </div>
                 </article>
             `;
@@ -1794,6 +1814,17 @@
         .summary-content h1 { font-size: 1.5rem; }
         .summary-content h2 { font-size: 1.25rem; }
         .summary-content h3 { font-size: 1.125rem; }
+
+        .summary-content.rtl {
+            direction: rtl;
+            text-align: right;
+        }
+
+        .summary-content.rtl ul,
+        .summary-content.rtl ol {
+            padding-left: 0;
+            padding-right: 1.5rem;
+        }
 
         .timestamp {
             font-size: 0.875rem;
