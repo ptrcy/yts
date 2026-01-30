@@ -656,6 +656,7 @@
         .summary-content.rtl {
             direction: rtl;
             text-align: right;
+            font-size: 1.25rem; /* 20px for better Arabic readability */
         }
 
         .summary-content.rtl ul,
@@ -895,6 +896,11 @@
                 aspect-ratio: 16/9;
             }
 
+            /* Always show delete button on mobile */
+            .delete-btn {
+                opacity: 0.7;
+            }
+
             .toast-container {
                 left: 1rem;
                 right: 1rem;
@@ -992,7 +998,7 @@
 
     <!-- Settings Modal -->
     <div class="modal-overlay" id="modalOverlay">
-        <div class="modal">
+        <div class="modal" data-lpignore="true" data-form-type="other">
             <div class="modal-header">
                 <h3 class="modal-title">Settings</h3>
                 <button class="modal-close" id="modalClose">
@@ -1019,14 +1025,14 @@
                     <label class="form-label">
                         YouTube API Key <span class="required">*</span>
                     </label>
-                    <input type="password" class="form-input" id="youtubeKeyInput" placeholder="AIza..." autocomplete="off">
+                    <input type="password" class="form-input" id="youtubeKeyInput" placeholder="AIza..." autocomplete="one-time-code" data-form-type="other">
                     <p class="form-hint">Get from Google Cloud Console</p>
                 </div>
                 <div class="form-group">
                     <label class="form-label">
                         Claude API Key <span class="required">*</span>
                     </label>
-                    <input type="password" class="form-input" id="claudeKeyInput" placeholder="sk-ant-..." autocomplete="off">
+                    <input type="password" class="form-input" id="claudeKeyInput" placeholder="sk-ant-..." autocomplete="one-time-code" data-form-type="other">
                     <p class="form-hint">Get from console.anthropic.com</p>
                 </div>
                 <div class="form-group">
@@ -1038,7 +1044,7 @@
                     <label class="form-label">
                         Transcript API Key <span class="required">*</span>
                     </label>
-                    <input type="password" class="form-input" id="transcriptKeyInput" placeholder="your-transcript-api-key" autocomplete="off">
+                    <input type="password" class="form-input" id="transcriptKeyInput" placeholder="your-transcript-api-key" autocomplete="one-time-code" data-form-type="other">
                     <p class="form-hint">For fetching YouTube transcripts (transcriptapi.com)</p>
                 </div>
             </div>
@@ -1818,6 +1824,7 @@
         .summary-content.rtl {
             direction: rtl;
             text-align: right;
+            font-size: 1.25rem; /* 20px for better Arabic readability */
         }
 
         .summary-content.rtl ul,

@@ -9,6 +9,24 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const PLAYLIST_ITEMS_URL = "https://www.googleapis.com/youtube/v3/playlistItems";
 const DELETE_URL = "https://www.googleapis.com/youtube/v3/playlistItems";
 
+// Retry logic for fetch requests
+async function fetchWithRetry(url, options, maxRetries = 3) {
+  const retryable = new Set([408, 429, 503]);
+
+  for (let i = 0; i < maxRetries; i++) {
+    const res = await fetch(url, options);
+
+    if (!retryable.has(res.status)) return res;
+
+    // 429 may include Retry-After; otherwise exponential backoff
+    const ra = res.headers.get("Retry-After");
+    const delaySec = ra ? Number(ra) : Math.pow(2, i); // 1,2,4...
+    await new Promise(r => setTimeout(r, Math.min(5, delaySec) * 1000));
+  }
+
+  throw new Error("Max retries exceeded");
+}
+
 export async function handler(event) {
   if (event.httpMethod !== "POST") {
     return respond(405, { error: "Method not allowed" });
@@ -53,7 +71,7 @@ export async function handler(event) {
 }
 
 async function exchangeRefreshToken({ clientId, clientSecret, refreshToken }) {
-  const res = await fetch(TOKEN_URL, {
+  const res = await fetchWithRetry(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -90,7 +108,7 @@ async function findPlaylistItemId({ playlistId, videoId, accessToken }) {
     url.searchParams.set("maxResults", "50");
     if (pageToken) url.searchParams.set("pageToken", pageToken);
 
-    const res = await fetch(url.toString(), {
+    const res = await fetchWithRetry(url.toString(), {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
@@ -118,7 +136,7 @@ async function deletePlaylistItem({ playlistItemId, accessToken }) {
   const url = new URL(DELETE_URL);
   url.searchParams.set("id", playlistItemId);
 
-  const res = await fetch(url.toString(), {
+  const res = await fetchWithRetry(url.toString(), {
     method: "DELETE",
     headers: { Authorization: `Bearer ${accessToken}` },
   });

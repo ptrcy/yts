@@ -4,6 +4,24 @@
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com';
 
+// Retry logic for fetch requests
+async function fetchWithRetry(url, options, maxRetries = 3) {
+  const retryable = new Set([408, 429, 503]);
+
+  for (let i = 0; i < maxRetries; i++) {
+    const res = await fetch(url, options);
+
+    if (!retryable.has(res.status)) return res;
+
+    // 429 may include Retry-After; otherwise exponential backoff
+    const ra = res.headers.get("Retry-After");
+    const delaySec = ra ? Number(ra) : Math.pow(2, i); // 1,2,4...
+    await new Promise(r => setTimeout(r, Math.min(5, delaySec) * 1000));
+  }
+
+  throw new Error("Max retries exceeded");
+}
+
 // CORS headers
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -21,7 +39,7 @@ async function fetchTranscript(videoId, transcriptApiKey) {
     send_metadata: 'true'
   });
 
-  const response = await fetch(
+  const response = await fetchWithRetry(
     `https://transcriptapi.com/api/v2/youtube/transcript?${params.toString()}`,
     {
       headers: {
@@ -50,7 +68,7 @@ async function fetchTranscript(videoId, transcriptApiKey) {
 // Fetch playlist info
 async function getPlaylistTitle(playlistId, apiKey) {
   const url = `${YOUTUBE_API_BASE}/playlists?part=snippet&id=${playlistId}&key=${apiKey}`;
-  const response = await fetch(url);
+  const response = await fetchWithRetry(url);
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
@@ -77,7 +95,7 @@ async function getRecentVideos(playlistId, apiKey, hoursBack) {
       url.searchParams.set('pageToken', nextPageToken);
     }
 
-    const response = await fetch(url.toString());
+    const response = await fetchWithRetry(url.toString());
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -140,7 +158,7 @@ Video Title: ${title}
 Transcript:
 ${transcript.substring(0, 70000)}`;
 
-  const response = await fetch(`${baseUrl}/v1/messages`, {
+  const response = await fetchWithRetry(`${baseUrl}/v1/messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -148,7 +166,7 @@ ${transcript.substring(0, 70000)}`;
       'anthropic-version': '2023-06-01'
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 2000,
       messages: [{
         role: 'user',
