@@ -1423,15 +1423,43 @@
         elements.summarizeBtn.addEventListener('click', summarizePlaylist);
 
         // Delete video card handler (event delegation)
-        elements.resultsGrid.addEventListener('click', (e) => {
+        elements.resultsGrid.addEventListener('click', async (e) => {
             const deleteBtn = e.target.closest('.delete-btn');
             if (deleteBtn) {
                 const videoCard = deleteBtn.closest('.video-card');
-                if (videoCard) {
-                    videoCard.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-                    videoCard.style.opacity = '0';
-                    videoCard.style.transform = 'scale(0.95)';
-                    setTimeout(() => videoCard.remove(), 300);
+                if (videoCard && !deleteBtn.disabled) {
+                    const videoId = videoCard.dataset.videoId;
+                    const playlistId = localStorage.getItem(STORAGE_KEYS.playlistId);
+
+                    // Disable button and show loading state
+                    deleteBtn.disabled = true;
+                    deleteBtn.style.opacity = '0.5';
+
+                    try {
+                        const response = await fetch('/.netlify/functions/delete-video', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ videoId, playlistId })
+                        });
+
+                        const result = await response.json();
+
+                        if (response.ok) {
+                            showToast('Video removed from playlist', 'success');
+                            videoCard.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                            videoCard.style.opacity = '0';
+                            videoCard.style.transform = 'scale(0.95)';
+                            setTimeout(() => videoCard.remove(), 300);
+                        } else {
+                            showToast(result.error || 'Failed to delete video', 'error');
+                            deleteBtn.disabled = false;
+                            deleteBtn.style.opacity = '';
+                        }
+                    } catch (error) {
+                        showToast('Network error: ' + error.message, 'error');
+                        deleteBtn.disabled = false;
+                        deleteBtn.style.opacity = '';
+                    }
                 }
             }
         });
