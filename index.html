@@ -404,6 +404,7 @@
 
         /* Video card */
         .video-card {
+            position: relative;
             background: var(--bg-surface);
             border: 1px solid var(--border-subtle);
             border-radius: 16px;
@@ -522,6 +523,38 @@
         .video-status.failed {
             background: rgba(255, 59, 48, 0.15);
             color: var(--accent);
+        }
+
+        .delete-btn {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: var(--bg-elevated);
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: all 0.2s ease;
+            color: var(--text-muted);
+        }
+
+        .video-card:hover .delete-btn {
+            opacity: 1;
+        }
+
+        .delete-btn:hover {
+            background: rgba(255, 59, 48, 0.15);
+            color: var(--accent);
+        }
+
+        .delete-btn svg {
+            width: 16px;
+            height: 16px;
         }
 
         .video-summary {
@@ -1208,7 +1241,14 @@
             const thumbnailUrl = `https://img.youtube.com/vi/${video.videoId}/mqdefault.jpg`;
 
             return `
-                <article class="video-card">
+                <article class="video-card" data-video-id="${video.videoId}">
+                    <button class="delete-btn" title="Remove from list">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 6h18"></path>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+                            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                    </button>
                     <div class="video-header">
                         <a href="https://www.youtube.com/watch?v=${video.videoId}" target="_blank" class="video-thumbnail">
                             <img src="${thumbnailUrl}" alt="${video.title}" loading="lazy">
@@ -1381,6 +1421,48 @@
             if (saveSettings()) closeModal();
         });
         elements.summarizeBtn.addEventListener('click', summarizePlaylist);
+
+        // Delete video card handler (event delegation)
+        elements.resultsGrid.addEventListener('click', async (e) => {
+            const deleteBtn = e.target.closest('.delete-btn');
+            if (deleteBtn) {
+                const videoCard = deleteBtn.closest('.video-card');
+                if (videoCard && !deleteBtn.disabled) {
+                    const videoId = videoCard.dataset.videoId;
+                    const playlistId = localStorage.getItem(STORAGE_KEYS.playlistId);
+
+                    // Disable button and show loading state
+                    deleteBtn.disabled = true;
+                    deleteBtn.style.opacity = '0.5';
+
+                    try {
+                        const response = await fetch('/.netlify/functions/delete-video', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ videoId, playlistId })
+                        });
+
+                        const result = await response.json();
+
+                        if (response.ok) {
+                            showToast('Video removed from playlist', 'success');
+                            videoCard.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                            videoCard.style.opacity = '0';
+                            videoCard.style.transform = 'scale(0.95)';
+                            setTimeout(() => videoCard.remove(), 300);
+                        } else {
+                            showToast(result.error || 'Failed to delete video', 'error');
+                            deleteBtn.disabled = false;
+                            deleteBtn.style.opacity = '';
+                        }
+                    } catch (error) {
+                        showToast('Network error: ' + error.message, 'error');
+                        deleteBtn.disabled = false;
+                        deleteBtn.style.opacity = '';
+                    }
+                }
+            }
+        });
 
         // Initialize
         initTheme(); // Apply theme immediately to prevent flash
