@@ -434,10 +434,26 @@ elements.resultsGrid.addEventListener('click', async (e) => {
 
                 if (response.ok) {
                     showToast('Video removed from playlist', 'success');
+
+                    // Find the next or previous card before removal
+                    const nextCard = videoCard.nextElementSibling;
+                    const prevCard = videoCard.previousElementSibling;
+
                     videoCard.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
                     videoCard.style.opacity = '0';
                     videoCard.style.transform = 'scale(0.95)';
-                    setTimeout(() => videoCard.remove(), 300);
+                    setTimeout(() => {
+                        videoCard.remove();
+
+                        // Scroll to next card (start) or previous card (end)
+                        const targetCard = nextCard || prevCard;
+                        if (targetCard) {
+                            targetCard.scrollIntoView({
+                                behavior: 'smooth',
+                                block: nextCard ? 'start' : 'end'
+                            });
+                        }
+                    }, 300);
                 } else {
                     showToast(result.error || 'Failed to delete video', 'error');
                     deleteBtn.disabled = false;
@@ -536,7 +552,19 @@ ${sharedCss}
     }
 });
 
+// Load external SVG sprite
+async function loadIconSprite() {
+    try {
+        const response = await fetch('assets/icons.svg');
+        const svg = await response.text();
+        document.getElementById('iconSprite').innerHTML = svg;
+    } catch (error) {
+        console.error('Failed to load icon sprite:', error);
+    }
+}
+
 // Initialize
+loadIconSprite();
 initTheme(); // Apply theme immediately to prevent flash
 
 document.addEventListener('DOMContentLoaded', () => {
