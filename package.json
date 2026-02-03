@@ -3,7 +3,7 @@
   "type": "module",
   "dependencies": {
     "@supadata/js": "^1.0.0",
-    "ai": "^4.1.30",
+    "ai": "^5.0.0",
     "@ai-sdk/openai": "^1.0.11"
   }
 }
