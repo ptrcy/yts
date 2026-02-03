@@ -4,8 +4,20 @@
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com';
 
+// Safe JSON parser with detailed error logging
+async function safeParseJson(response, context) {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    const preview = text.substring(0, 200);
+    console.error(`[${context}] JSON parse failed - Status: ${response.status}, Preview: ${preview}`);
+    throw new Error(`${context}: Invalid JSON response (status ${response.status}) - ${preview}`);
+  }
+}
+
 // Retry logic for fetch requests
-async function fetchWithRetry(url, options, maxRetries = 3) {
+async function fetchWithRetry(url, options, maxRetries = 3, context = '') {
   const retryable = new Set([408, 429, 503]);
 
   for (let i = 0; i < maxRetries; i++) {
@@ -16,10 +28,13 @@ async function fetchWithRetry(url, options, maxRetries = 3) {
     // 429 may include Retry-After; otherwise exponential backoff
     const ra = res.headers.get("Retry-After");
     const delaySec = ra ? Number(ra) : Math.pow(2, i); // 1,2,4...
-    await new Promise(r => setTimeout(r, Math.min(5, delaySec) * 1000));
+    const delayMs = Math.min(5, delaySec) * 1000;
+    console.warn(`[${context || 'Fetch'}] Retryable status ${res.status}, attempt ${i + 1}/${maxRetries}, waiting ${delayMs}ms`);
+    await new Promise(r => setTimeout(r, delayMs));
   }
 
-  throw new Error("Max retries exceeded");
+  console.error(`[${context || 'Fetch'}] Max retries (${maxRetries}) exceeded`);
+  throw new Error(`${context ? context + ': ' : ''}Max retries exceeded`);
 }
 
 // CORS headers
@@ -45,15 +60,17 @@ async function fetchTranscript(videoId, transcriptApiKey) {
       headers: {
         Authorization: `Bearer ${transcriptApiKey}`
       }
-    }
+    },
+    3,
+    `TranscriptAPI[${videoId}]`
   );
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.message || `Transcript API error: ${response.status}`);
-  }
+  const data = await safeParseJson(response, `TranscriptAPI[${videoId}]`);
 
-  const data = await response.json();
+  if (!response.ok) {
+    console.error(`[TranscriptAPI] Error for ${videoId}:`, data);
+    throw new Error(data.message || `Transcript API error: ${response.status}`);
+  }
 
   if (data.transcript) {
     return {
@@ -62,20 +79,21 @@ async function fetchTranscript(videoId, transcriptApiKey) {
     };
   }
 
+  console.error(`[TranscriptAPI] No transcript in response for ${videoId}:`, data);
   throw new Error('No transcript available');
 }
 
 // Fetch playlist info
 async function getPlaylistTitle(playlistId, apiKey) {
   const url = `${YOUTUBE_API_BASE}/playlists?part=snippet&id=${playlistId}&key=${apiKey}`;
-  const response = await fetchWithRetry(url);
+  const response = await fetchWithRetry(url, {}, 3, `YouTube/playlists[${playlistId}]`);
+  const data = await safeParseJson(response, `YouTube/playlists[${playlistId}]`);
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error?.message || 'Failed to fetch playlist info');
+    console.error(`[YouTube/playlists] Error for ${playlistId}:`, data);
+    throw new Error(data.error?.message || 'Failed to fetch playlist info');
   }
 
-  const data = await response.json();
   return data.items?.[0]?.snippet?.title || 'Unknown Playlist';
 }
 
@@ -95,14 +113,13 @@ async function getRecentVideos(playlistId, apiKey, hoursBack) {
       url.searchParams.set('pageToken', nextPageToken);
     }
 
-    const response = await fetchWithRetry(url.toString());
+    const response = await fetchWithRetry(url.toString(), {}, 3, `YouTube/playlistItems[${playlistId}]`);
+    const data = await safeParseJson(response, `YouTube/playlistItems[${playlistId}]`);
 
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error?.message || 'Failed to fetch playlist items');
+      console.error(`[YouTube/playlistItems] Error for ${playlistId}:`, data);
+      throw new Error(data.error?.message || 'Failed to fetch playlist items');
     }
-
-    const data = await response.json();
 
     for (const item of data.items || []) {
       const publishedAt = new Date(item.snippet.publishedAt);
@@ -158,29 +175,34 @@ Video Title: ${title}
 Transcript:
 ${transcript.substring(0, 70000)}`;
 
-  const response = await fetchWithRetry(`${baseUrl}/v1/messages`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': claudeApiKey,
-      'anthropic-version': '2023-06-01'
+  const response = await fetchWithRetry(
+    `${baseUrl}/v1/messages`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': claudeApiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5-20250929',
+        max_tokens: 2000,
+        messages: [{
+          role: 'user',
+          content: prompt
+        }]
+      })
     },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 2000,
-      messages: [{
-        role: 'user',
-        content: prompt
-      }]
-    })
-  });
+    3,
+    `Claude[${title.substring(0, 30)}]`
+  );
+
+  const data = await safeParseJson(response, `Claude[${title.substring(0, 30)}]`);
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error?.message || 'Failed to generate summary');
+    console.error(`[Claude] Error for "${title}":`, data);
+    throw new Error(data.error?.message || 'Failed to generate summary');
   }
-
-  const data = await response.json();
 
   for (const block of data.content || []) {
     if (block.type === 'text') {
@@ -188,6 +210,7 @@ ${transcript.substring(0, 70000)}`;
     }
   }
 
+  console.error(`[Claude] No text block in response for "${title}":`, data);
   throw new Error('No summary generated');
 }
 
@@ -260,6 +283,7 @@ export async function handler(event) {
           })
         };
       } catch (err) {
+        console.error(`[Process] Failed for video ${video.videoId} "${video.title}":`, err.message);
         return {
           statusCode: 200,
           headers,
