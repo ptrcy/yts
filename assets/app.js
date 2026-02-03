@@ -10,9 +10,11 @@ function escapeHtml(text) {
 }
 
 // API base path - auto-detect platform (Vercel vs Netlify)
-const API_BASE = window.location.hostname.includes('vercel')
-    ? '/api'
-    : '/.netlify/functions';
+// Netlify uses /.netlify/functions, Vercel uses /api
+// Default to Vercel (/api) unless we detect Netlify hostname
+const API_BASE = window.location.hostname.includes('netlify')
+    ? '/.netlify/functions'
+    : '/api';
 
 // Storage keys
 const STORAGE_KEYS = {
