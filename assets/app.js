@@ -9,6 +9,11 @@ function escapeHtml(text) {
         .replace(/'/g, '&#039;');
 }
 
+// API base path - auto-detect platform (Vercel vs Netlify)
+const API_BASE = window.location.hostname.includes('vercel')
+    ? '/api'
+    : '/.netlify/functions';
+
 // Storage keys
 const STORAGE_KEYS = {
     playlistId: 'yps_playlist_id',
@@ -333,7 +338,7 @@ async function summarizePlaylist() {
         // Step 1: Get video list
         updateProgress('Fetching playlist videos...');
 
-        const listResponse = await fetch('/.netlify/functions/summarize', {
+        const listResponse = await fetch(`${API_BASE}/summarize`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -372,7 +377,7 @@ async function summarizePlaylist() {
             updateProgress(`Processing video ${i + 1} of ${videos.length}...`, video.title);
 
             try {
-                const processResponse = await fetch('/.netlify/functions/summarize', {
+                const processResponse = await fetch(`${API_BASE}/summarize`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -446,7 +451,7 @@ elements.resultsGrid.addEventListener('click', async (e) => {
             deleteBtn.style.opacity = '0.5';
 
             try {
-                const response = await fetch('/.netlify/functions/delete-video', {
+                const response = await fetch(`${API_BASE}/delete-video`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ videoId, playlistId })

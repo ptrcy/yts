@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "api/summarize.js": {
+      "maxDuration": 300
+    },
+    "api/delete-video.js": {
+      "maxDuration": 60
+    }
+  }
+}
