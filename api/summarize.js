@@ -232,4 +232,43 @@ export default async function handler(req, res) {
 
       // Allow passing Gemini key from the client, but prefer env in production.
       // (If you don’t want client-sent keys, delete these 2 lines.)
-      if (!process.env.GO
+      if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY && geminiApiKey) {
+        process.env.GOOGLE_GENERATIVE_AI_API_KEY = geminiApiKey;
+      }
+
+      if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+        return res.status(400).json({
+          error:
+            'Missing GOOGLE_GENERATIVE_AI_API_KEY (env) or geminiApiKey (request).',
+        });
+      }
+
+      try {
+        const { text: transcript, language } = await fetchTranscript(video.videoId, transcriptApiKey);
+        const summary = await summarizeTranscript(transcript, video.title, language);
+
+        return res.status(200).json({
+          ...video,
+          summary,
+          language,
+          status: 'success',
+        });
+      } catch (err) {
+        console.error(
+          `[Process] Failed for video ${video?.videoId} "${video?.title}":`,
+          err?.message || err
+        );
+        return res.status(200).json({
+          ...video,
+          summary: `Error: ${err?.message || 'Unknown error'}`,
+          status: 'failed',
+        });
+      }
+    }
+
+    return res.status(400).json({ error: 'Invalid action. Use "list" or "process".' });
+  } catch (error) {
+    console.error('Error:', error);
+    return res.status(500).json({ error: error?.message || 'Internal server error' });
+  }
+}
