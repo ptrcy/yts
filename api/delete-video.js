@@ -129,8 +129,17 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  // Log request for debugging
+  console.log('[delete-video] Request:', {
+    method: req.method,
+    bodyType: typeof req.body,
+    body: req.body
+  });
+
   const videoId = req.body?.videoId || req.body?.video_id;
   const playlistId = req.body?.playlistId || req.body?.playlist_id;
+
+  console.log('[delete-video] Parsed:', { videoId, playlistId });
 
   if (!videoId) return res.status(400).json({ error: "Missing videoId" });
   if (!playlistId) return res.status(400).json({ error: "Missing playlistId" });
@@ -138,6 +147,13 @@ export default async function handler(req, res) {
   const clientId = process.env.YT_CLIENT_ID;
   const clientSecret = process.env.YT_CLIENT_SECRET;
   const refreshToken = process.env.YT_REFRESH_TOKEN;
+
+  // Log env vars for debugging (masked for security)
+  console.log('[delete-video] Environment check:', {
+    YT_CLIENT_ID: clientId ? `${clientId.substring(0, 10)}...${clientId.slice(-20)}` : 'MISSING',
+    YT_CLIENT_SECRET: clientSecret ? `${clientSecret.substring(0, 4)}...${clientSecret.slice(-4)} (len: ${clientSecret.length})` : 'MISSING',
+    YT_REFRESH_TOKEN: refreshToken ? `${refreshToken.substring(0, 10)}... (len: ${refreshToken.length})` : 'MISSING',
+  });
 
   if (!clientId || !clientSecret || !refreshToken) {
     return res.status(500).json({ error: "Server missing YouTube OAuth env vars" });
