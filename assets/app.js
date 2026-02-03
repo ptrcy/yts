@@ -1,3 +1,14 @@
+// Escape HTML entities to prevent XSS and broken rendering
+function escapeHtml(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 // Storage keys
 const STORAGE_KEYS = {
     playlistId: 'yps_playlist_id',
@@ -232,8 +243,19 @@ function createVideoCard(video) {
         day: 'numeric'
     });
 
+    // Escape HTML in title and channel to prevent broken rendering
+    const safeTitle = escapeHtml(video.title) || 'Untitled Video';
+    const safeChannel = escapeHtml(video.channel) || 'Unknown Channel';
+
+    // Handle summary - escape error messages to prevent HTML injection
+    let summaryText = video.summary || 'No summary available';
+    if (summaryText.startsWith('Error:')) {
+        // Error messages may contain raw HTML from failed API responses - escape it
+        summaryText = escapeHtml(summaryText);
+    }
+
     // Convert LaTeX to Unicode before markdown parsing
-    const summaryWithUnicode = latexAllToUnicode(video.summary || 'No summary available');
+    const summaryWithUnicode = latexAllToUnicode(summaryText);
     const summaryHtml = marked.parse(summaryWithUnicode);
     const thumbnailUrl = `https://img.youtube.com/vi/${video.videoId}/mqdefault.jpg`;
     const isRtl = video.language === 'ar';
@@ -242,7 +264,7 @@ function createVideoCard(video) {
         <article class="video-card" data-video-id="${video.videoId}">
             <div class="video-header">
                 <a href="https://www.youtube.com/watch?v=${video.videoId}" target="_blank" class="video-thumbnail">
-                    <img src="${thumbnailUrl}" alt="${video.title}" loading="lazy">
+                    <img src="${thumbnailUrl}" alt="${safeTitle}" loading="lazy">
                     <div class="play-icon">
                         <svg><use href="#icon-play"/></svg>
                     </div>
@@ -250,13 +272,13 @@ function createVideoCard(video) {
                 <div class="video-info">
                     <h3 class="video-title">
                         <a href="https://www.youtube.com/watch?v=${video.videoId}" target="_blank">
-                            ${video.title}
+                            ${safeTitle}
                         </a>
                     </h3>
                     <div class="video-meta">
                         <span>
                             <svg><use href="#icon-user"/></svg>
-                            ${video.channel}
+                            ${safeChannel}
                         </span>
                         <span>
                             <svg><use href="#icon-calendar"/></svg>
