@@ -1,8 +1,11 @@
 // Vercel serverless function for YouTube Playlist Summarizer
-// Uses YouTube Data API, TranscriptAPI for transcripts, and Claude API for summaries
+// Uses YouTube Data API, TranscriptAPI for transcripts, and Vercel AI SDK with Google Gemini for summaries
+
+import { generateText } from 'ai';
+import { createOpenAI } from '@ai-sdk/openai';
 
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
-const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com';
+const VERCEL_API_BASE = 'https://api.vercel.ai/v1';
 
 // Safe JSON parser with detailed error logging
 async function safeParseJson(response, context) {
@@ -147,9 +150,10 @@ const NATIVE_LANGUAGE_NAMES = {
   ar: 'Arabic'
 };
 
-// Summarize transcript using Claude
+// Summarize transcript using Vercel AI SDK with Google Gemini
 async function summarizeTranscript(transcript, title, claudeApiKey, claudeBaseUrl, language) {
-  const baseUrl = claudeBaseUrl || DEFAULT_CLAUDE_BASE_URL;
+  // Use Vercel API key from environment, fall back to claudeApiKey for compatibility
+  const vercelApiKey = process.env.VERCEL_API_KEY || claudeApiKey;
 
   const nativeLang = NATIVE_LANGUAGE_NAMES[language];
   const langInstruction = nativeLang
@@ -167,43 +171,24 @@ Video Title: ${title}
 Transcript:
 ${transcript.substring(0, 70000)}`;
 
-  const response = await fetchWithRetry(
-    `${baseUrl}/v1/messages`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': claudeApiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 2000,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      })
-    },
-    3,
-    `Claude[${title.substring(0, 30)}]`
-  );
+  // Create Vercel OpenAI-compatible client for Google models
+  const vercel = createOpenAI({
+    baseURL: VERCEL_API_BASE,
+    apiKey: vercelApiKey,
+  });
 
-  const data = await safeParseJson(response, `Claude[${title.substring(0, 30)}]`);
+  try {
+    const { text } = await generateText({
+      model: vercel('google/gemini-3-flash'),
+      maxTokens: 2000,
+      prompt: prompt,
+    });
 
-  if (!response.ok) {
-    console.error(`[Claude] Error for "${title}":`, data);
-    throw new Error(data.error?.message || 'Failed to generate summary');
+    return text;
+  } catch (error) {
+    console.error(`[Vercel AI] Error for "${title}":`, error);
+    throw new Error(error.message || 'Failed to generate summary');
   }
-
-  for (const block of data.content || []) {
-    if (block.type === 'text') {
-      return block.text;
-    }
-  }
-
-  console.error(`[Claude] No text block in response for "${title}":`, data);
-  throw new Error('No summary generated');
 }
 
 // Set CORS headers

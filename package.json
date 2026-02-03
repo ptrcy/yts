@@ -2,6 +2,8 @@
   "name": "yts-functions",
   "type": "module",
   "dependencies": {
-    "@supadata/js": "^1.0.0"
+    "@supadata/js": "^1.0.0",
+    "ai": "^4.1.30",
+    "@ai-sdk/openai": "^1.0.11"
   }
 }
