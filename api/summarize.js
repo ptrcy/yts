@@ -175,7 +175,7 @@ Video Title: ${title}
 Transcript:
 ${transcript.substring(0, 70000)}`;
 
-  // Requires GOOGLE_GENERATIVE_AI_API_KEY in env (or set at runtime in handler below)
+  // Requires AI_GATEWAY_API_KEY in env
   const result = streamText({
     model: 'google/gemini-3-flash',
     prompt,
@@ -224,22 +224,15 @@ export default async function handler(req, res) {
 
     // ACTION: PROCESS - Process a single video
     if (action === 'process') {
-      const { video, transcriptApiKey, geminiApiKey } = req.body || {};
+      const { video, transcriptApiKey } = req.body || {};
 
       if (!video || !transcriptApiKey) {
         return res.status(400).json({ error: 'Missing video or transcriptApiKey' });
       }
 
-      // Allow passing Gemini key from the client, but prefer env in production.
-      // (If you don’t want client-sent keys, delete these 2 lines.)
-      if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY && geminiApiKey) {
-        process.env.GOOGLE_GENERATIVE_AI_API_KEY = geminiApiKey;
-      }
-
-      if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+      if (!process.env.AI_GATEWAY_API_KEY) {
         return res.status(400).json({
-          error:
-            'Missing GOOGLE_GENERATIVE_AI_API_KEY (env) or geminiApiKey (request).',
+          error: 'Missing AI_GATEWAY_API_KEY env var.',
         });
       }
 
