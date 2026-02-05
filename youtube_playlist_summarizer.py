@@ -146,8 +146,9 @@ class YouTubePlaylistSummarizer:
 
     def summarize_transcript(self, transcript: str, title: str) -> str:
         """Generate a summary using Claude."""
-        prompt = f"""Please provide a comprehensive summary of this YouTube video transcript.
-Focus on the main points, key takeaways, and important details.
+        prompt = f"""Please summarize this YouTube video transcript.
+Start with a short executive summary (3-5 sentences capturing the essence).
+Then provide a more detailed summary with the main points, key takeaways, and important details.
 
 Video Title: {title}
 

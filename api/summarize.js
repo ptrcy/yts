@@ -166,8 +166,9 @@ async function summarizeTranscript(transcript, title, language) {
 
   const prompt = `${langInstruction}
 
-Please provide a comprehensive summary of this YouTube video transcript in Markdown format.
-Focus on the main points, key takeaways, and important details.
+Please summarize this YouTube video transcript in Markdown format.
+Start with a short executive summary (3-5 sentences capturing the essence).
+Then provide a more detailed summary with the main points, key takeaways, and important details.
 Use bullet points, headers, and formatting to make the summary easy to read.
 
 Video Title: ${title}
