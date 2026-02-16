@@ -391,6 +391,11 @@ async function summarizePlaylist() {
                     })
                 });
 
+                const contentType = processResponse.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    throw new Error(`Server returned ${processResponse.status} (non-JSON response)`);
+                }
+
                 const result = await processResponse.json();
                 results.push(result);
 

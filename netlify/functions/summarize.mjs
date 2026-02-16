@@ -127,12 +127,18 @@ async function getRecentVideos(playlistId, apiKey, hoursBack) {
     }
 
     for (const item of data?.items || []) {
+      const videoId = item.contentDetails?.videoId;
+      const title = item.snippet?.title;
+
+      // Skip deleted/private videos with missing data
+      if (!videoId || !title || title === 'Private video' || title === 'Deleted video') continue;
+
       const publishedAt = new Date(item.snippet.publishedAt);
 
       if (publishedAt >= cutoffDate) {
         videos.push({
-          videoId: item.contentDetails.videoId,
-          title: item.snippet.title,
+          videoId,
+          title,
           channel: item.snippet.channelTitle,
           publishedAt: item.snippet.publishedAt
         });
