@@ -10,7 +10,7 @@ const PLAYLIST_ITEMS_URL = "https://www.googleapis.com/youtube/v3/playlistItems"
 const DELETE_URL = "https://www.googleapis.com/youtube/v3/playlistItems";
 
 // Retry logic for fetch requests
-async function fetchWithRetry(url, options, maxRetries = 3) {
+async function fetchWithRetry(url, options, maxRetries = 3, context = '') {
   const retryable = new Set([408, 429, 503]);
 
   for (let i = 0; i < maxRetries; i++) {
@@ -21,13 +21,21 @@ async function fetchWithRetry(url, options, maxRetries = 3) {
     // 429 may include Retry-After; otherwise exponential backoff
     const ra = res.headers.get("Retry-After");
     const delaySec = ra ? Number(ra) : Math.pow(2, i); // 1,2,4...
-    await new Promise(r => setTimeout(r, Math.min(5, delaySec) * 1000));
+    const delayMs = Math.min(5, delaySec) * 1000;
+    console.warn(`[${context || 'Fetch'}] Retryable status ${res.status}, attempt ${i + 1}/${maxRetries}, waiting ${delayMs}ms`);
+    await new Promise(r => setTimeout(r, delayMs));
   }
 
-  throw new Error("Max retries exceeded");
+  console.error(`[${context || 'Fetch'}] Max retries (${maxRetries}) exceeded`);
+  throw new Error(`${context ? context + ': ' : ''}Max retries exceeded`);
 }
 
 export async function handler(event) {
+  // Handle preflight
+  if (event.httpMethod === "OPTIONS") {
+    return respond(204, "");
+  }
+
   if (event.httpMethod !== "POST") {
     return respond(405, { error: "Method not allowed" });
   }
@@ -80,7 +88,7 @@ async function exchangeRefreshToken({ clientId, clientSecret, refreshToken }) {
       refresh_token: refreshToken,
       grant_type: "refresh_token",
     }),
-  });
+  }, 3, 'OAuth/token');
 
   if (!res.ok) {
     const detail = await res.text();
@@ -110,7 +118,7 @@ async function findPlaylistItemId({ playlistId, videoId, accessToken }) {
 
     const res = await fetchWithRetry(url.toString(), {
       headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    }, 3, `YouTube/playlistItems[${playlistId}]`);
 
     if (!res.ok) {
       const detail = await res.text();
@@ -139,7 +147,7 @@ async function deletePlaylistItem({ playlistItemId, accessToken }) {
   const res = await fetchWithRetry(url.toString(), {
     method: "DELETE",
     headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  }, 3, `YouTube/delete[${playlistItemId}]`);
 
   if (!res.ok) {
     const detail = await res.text();
@@ -155,7 +163,9 @@ function respond(statusCode, body) {
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
     },
-    body: JSON.stringify(body),
+    body: typeof body === 'string' ? body : JSON.stringify(body),
   };
 }

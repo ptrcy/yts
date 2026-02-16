@@ -7,6 +7,8 @@ const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com';
 // Safe JSON parser with detailed error logging
 async function safeParseJson(response, context) {
   const text = await response.text();
+  if (!text) return null;
+
   try {
     return JSON.parse(text);
   } catch (e) {
@@ -47,8 +49,11 @@ const headers = {
 
 // Fetch transcript using TranscriptAPI
 async function fetchTranscript(videoId, transcriptApiKey) {
+  // TranscriptAPI expects a video_url. Passing only the ID often fails.
+  const videoUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+
   const params = new URLSearchParams({
-    video_url: videoId,
+    video_url: videoUrl,
     format: 'text',
     include_timestamp: 'false',
     send_metadata: 'true'
@@ -69,10 +74,10 @@ async function fetchTranscript(videoId, transcriptApiKey) {
 
   if (!response.ok) {
     console.error(`[TranscriptAPI] Error for ${videoId}:`, data);
-    throw new Error(data.message || `Transcript API error: ${response.status}`);
+    throw new Error(data?.message || `Transcript API error: ${response.status}`);
   }
 
-  if (data.transcript) {
+  if (data?.transcript) {
     return {
       text: data.transcript,
       language: data.language || null
@@ -91,10 +96,10 @@ async function getPlaylistTitle(playlistId, apiKey) {
 
   if (!response.ok) {
     console.error(`[YouTube/playlists] Error for ${playlistId}:`, data);
-    throw new Error(data.error?.message || 'Failed to fetch playlist info');
+    throw new Error(data?.error?.message || 'Failed to fetch playlist info');
   }
 
-  return data.items?.[0]?.snippet?.title || 'Unknown Playlist';
+  return data?.items?.[0]?.snippet?.title || 'Unknown Playlist';
 }
 
 // Fetch recent videos from playlist
@@ -118,10 +123,10 @@ async function getRecentVideos(playlistId, apiKey, hoursBack) {
 
     if (!response.ok) {
       console.error(`[YouTube/playlistItems] Error for ${playlistId}:`, data);
-      throw new Error(data.error?.message || 'Failed to fetch playlist items');
+      throw new Error(data?.error?.message || 'Failed to fetch playlist items');
     }
 
-    for (const item of data.items || []) {
+    for (const item of data?.items || []) {
       const publishedAt = new Date(item.snippet.publishedAt);
 
       if (publishedAt >= cutoffDate) {
@@ -134,14 +139,12 @@ async function getRecentVideos(playlistId, apiKey, hoursBack) {
       }
     }
 
-    nextPageToken = data.nextPageToken;
+    nextPageToken = data?.nextPageToken;
 
     // Stop if we've gone past the cutoff date
-    if (data.items && data.items.length > 0) {
+    if (data?.items?.length) {
       const lastDate = new Date(data.items[data.items.length - 1].snippet.publishedAt);
-      if (lastDate < cutoffDate) {
-        break;
-      }
+      if (lastDate < cutoffDate) break;
     }
   } while (nextPageToken && videos.length < 50);
 
@@ -202,10 +205,10 @@ ${transcript.substring(0, 70000)}`;
 
   if (!response.ok) {
     console.error(`[Claude] Error for "${title}":`, data);
-    throw new Error(data.error?.message || 'Failed to generate summary');
+    throw new Error(data?.error?.message || 'Failed to generate summary');
   }
 
-  for (const block of data.content || []) {
+  for (const block of data?.content || []) {
     if (block.type === 'text') {
       return block.text;
     }
@@ -246,7 +249,7 @@ export async function handler(event) {
         };
       }
 
-      const hours = parseInt(hoursBack) || 168;
+      const hours = Number.isFinite(Number(hoursBack)) ? parseInt(hoursBack, 10) : 168;
       const playlistTitle = await getPlaylistTitle(playlistId, youtubeApiKey);
       const videos = await getRecentVideos(playlistId, youtubeApiKey, hours);
 
@@ -284,13 +287,13 @@ export async function handler(event) {
           })
         };
       } catch (err) {
-        console.error(`[Process] Failed for video ${video.videoId} "${video.title}":`, err.message);
+        console.error(`[Process] Failed for video ${video?.videoId} "${video?.title}":`, err?.message || err);
         return {
           statusCode: 200,
           headers,
           body: JSON.stringify({
             ...video,
-            summary: `Error: ${err.message}`,
+            summary: `Error: ${err?.message || 'Unknown error'}`,
             status: 'failed'
           })
         };
@@ -308,7 +311,7 @@ export async function handler(event) {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: error.message || 'Internal server error' })
+      body: JSON.stringify({ error: error?.message || 'Internal server error' })
     };
   }
 }
