@@ -27,7 +27,7 @@ const STORAGE_KEYS = {
     theme: 'yps_theme'
 };
 
-// Current playlist title for PDF export
+// Current playlist title for HTML export
 let currentPlaylistTitle = 'Summaries';
 
 // DOM Elements

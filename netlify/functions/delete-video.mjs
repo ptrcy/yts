@@ -40,6 +40,16 @@ export async function handler(event) {
     return respond(405, { error: "Method not allowed" });
   }
 
+  const clientId = process.env.YT_CLIENT_ID;
+  const clientSecret = process.env.YT_CLIENT_SECRET;
+  const refreshToken = process.env.YT_REFRESH_TOKEN;
+
+  console.log('[delete-video] ENV CHECK:', {
+    YT_CLIENT_ID: clientId ? `${clientId.substring(0, 15)}...${clientId.slice(-25)}` : 'MISSING',
+    YT_CLIENT_SECRET: clientSecret ? `${clientSecret.substring(0, 5)}...${clientSecret.slice(-4)} (len: ${clientSecret.length})` : 'MISSING',
+    YT_REFRESH_TOKEN: refreshToken ? `${refreshToken.substring(0, 15)}... (len: ${refreshToken.length})` : 'MISSING',
+  });
+
   let payload = {};
   try {
     payload = JSON.parse(event.body || "{}");
@@ -47,15 +57,14 @@ export async function handler(event) {
     return respond(400, { error: "Invalid JSON body" });
   }
 
+  // Log request for debugging
+  console.log('[delete-video] Request:', { videoId: payload.videoId, playlistId: payload.playlistId });
+
   const videoId = payload.videoId || payload.video_id;
   const playlistId = payload.playlistId || payload.playlist_id;
 
   if (!videoId) return respond(400, { error: "Missing videoId" });
   if (!playlistId) return respond(400, { error: "Missing playlistId" });
-
-  const clientId = process.env.YT_CLIENT_ID;
-  const clientSecret = process.env.YT_CLIENT_SECRET;
-  const refreshToken = process.env.YT_REFRESH_TOKEN;
 
   if (!clientId || !clientSecret || !refreshToken) {
     return respond(500, { error: "Server missing YouTube OAuth env vars" });

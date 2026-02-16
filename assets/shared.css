@@ -25,6 +25,7 @@
     --accent-glow: rgba(99, 102, 241, 0.4);
     --accent-soft: rgba(99, 102, 241, 0.1);
     --success: #30d158;
+    --error: #ff453a;
     --warning: #ffd60a;
     --gradient-spotlight: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.15), transparent);
 }
@@ -43,6 +44,7 @@
     --accent-glow: rgba(99, 102, 241, 0.3);
     --accent-soft: rgba(99, 102, 241, 0.08);
     --success: #28a745;
+    --error: #d70015;
     --warning: #ffcc00;
     --gradient-spotlight: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.08), transparent);
 }
@@ -226,7 +228,7 @@ header {
 
 .video-status.failed {
     background: rgba(255, 59, 48, 0.15);
-    color: var(--accent);
+    color: var(--error);
 }
 
 /* Video summary */

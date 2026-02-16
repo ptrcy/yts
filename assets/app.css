@@ -579,8 +579,8 @@ header {
 }
 
 .toast.error {
-    border-color: var(--accent);
-    background: linear-gradient(135deg, var(--accent-soft), var(--bg-elevated));
+    border-color: var(--error);
+    background: linear-gradient(135deg, rgba(255, 69, 58, 0.1), var(--bg-elevated));
 }
 
 .toast.success {
