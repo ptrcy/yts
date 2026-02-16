@@ -277,11 +277,11 @@ def main():
     ANTHROPIC_BASE_URL = os.getenv('ANTHROPIC_BASE_URL')
     
     if not YOUTUBE_API_KEY:
-        print("Error: YOUTUBE_API_KEY environment variable not set")
+        print("Error: YOUTUBE_DATA_API_KEY environment variable not set")
         sys.exit(1)
     
     if not ANTHROPIC_API_KEY:
-        print("Error: ANTHROPIC_API_KEY environment variable not set")
+        print("Error: ANTHROPIC_API_TOKEN environment variable not set")
         sys.exit(1)
     
     # Get playlist ID from command line

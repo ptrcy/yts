@@ -9,6 +9,36 @@ function escapeHtml(text) {
         .replace(/'/g, '&#039;');
 }
 
+// Sanitize rendered HTML to prevent script execution from model/API output.
+function sanitizeHtml(html) {
+    const template = document.createElement('template');
+    template.innerHTML = html;
+
+    const blockedTags = ['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta'];
+    blockedTags.forEach((tag) => {
+        template.content.querySelectorAll(tag).forEach((el) => el.remove());
+    });
+
+    template.content.querySelectorAll('*').forEach((el) => {
+        for (const attr of [...el.attributes]) {
+            const name = attr.name.toLowerCase();
+            const value = (attr.value || '').trim().toLowerCase();
+
+            if (name.startsWith('on')) {
+                el.removeAttribute(attr.name);
+                continue;
+            }
+
+            if ((name === 'href' || name === 'src' || name === 'xlink:href') &&
+                (value.startsWith('javascript:') || value.startsWith('data:text/html'))) {
+                el.removeAttribute(attr.name);
+            }
+        }
+    });
+
+    return template.innerHTML;
+}
+
 // API base path - auto-detect platform (Vercel vs Netlify)
 // Netlify uses /.netlify/functions, Vercel uses /api
 // Default to Vercel (/api) unless we detect Netlify hostname
@@ -219,10 +249,14 @@ async function importConfig() {
 function showToast(message, type = 'info') {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    toast.innerHTML = `
-        <svg width="18" height="18"><use href="#icon-${type === 'error' ? 'error' : 'success'}"/></svg>
-        ${message}
-    `;
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    icon.setAttribute('width', '18');
+    icon.setAttribute('height', '18');
+    const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+    use.setAttribute('href', `#icon-${type === 'error' ? 'error' : 'success'}`);
+    icon.appendChild(use);
+    toast.appendChild(icon);
+    toast.appendChild(document.createTextNode(String(message)));
     elements.toastContainer.appendChild(toast);
 
     setTimeout(() => {
@@ -263,7 +297,7 @@ function createVideoCard(video) {
 
     // Convert LaTeX to Unicode before markdown parsing
     const summaryWithUnicode = latexAllToUnicode(summaryText);
-    const summaryHtml = marked.parse(summaryWithUnicode);
+    const summaryHtml = sanitizeHtml(marked.parse(summaryWithUnicode));
     const thumbnailUrl = `https://img.youtube.com/vi/${video.videoId}/mqdefault.jpg`;
     const isRtl = video.language === 'ar';
 
@@ -515,6 +549,7 @@ elements.downloadHtmlBtn.addEventListener('click', async () => {
 
         // Get the current theme
         const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+        const safePlaylistTitle = escapeHtml(currentPlaylistTitle);
 
         // Get results grid without delete buttons
         const tempDiv = document.createElement('div');
@@ -528,7 +563,7 @@ elements.downloadHtmlBtn.addEventListener('click', async () => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${currentPlaylistTitle}</title>
+    <title>${safePlaylistTitle}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
@@ -541,7 +576,7 @@ ${sharedCss}
     <div class="container">
         <header>
             <div class="logo">
-                <h1>${currentPlaylistTitle}</h1>
+                <h1>${safePlaylistTitle}</h1>
                 <span class="logo-subtitle">Generated on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
             </div>
         </header>

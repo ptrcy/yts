@@ -14,7 +14,19 @@ async function fetchWithRetry(url, options, maxRetries = 3, context = '') {
   const retryable = new Set([408, 429, 503]);
 
   for (let i = 0; i < maxRetries; i++) {
-    const res = await fetch(url, options);
+    let res;
+    try {
+      res = await fetch(url, options);
+    } catch (err) {
+      const isLastAttempt = i === maxRetries - 1;
+      const delayMs = Math.min(5, Math.pow(2, i)) * 1000;
+      console.warn(
+        `[${context || 'Fetch'}] Network error on attempt ${i + 1}/${maxRetries}: ${err?.message || err}`
+      );
+      if (isLastAttempt) break;
+      await new Promise(r => setTimeout(r, delayMs));
+      continue;
+    }
 
     if (!retryable.has(res.status)) return res;
 
@@ -45,9 +57,9 @@ export async function handler(event) {
   const refreshToken = process.env.YT_REFRESH_TOKEN;
 
   console.log('[delete-video] ENV CHECK:', {
-    YT_CLIENT_ID: clientId ? `${clientId.substring(0, 15)}...${clientId.slice(-25)}` : 'MISSING',
-    YT_CLIENT_SECRET: clientSecret ? `${clientSecret.substring(0, 5)}...${clientSecret.slice(-4)} (len: ${clientSecret.length})` : 'MISSING',
-    YT_REFRESH_TOKEN: refreshToken ? `${refreshToken.substring(0, 15)}... (len: ${refreshToken.length})` : 'MISSING',
+    YT_CLIENT_ID: clientId ? 'SET' : 'MISSING',
+    YT_CLIENT_SECRET: clientSecret ? 'SET' : 'MISSING',
+    YT_REFRESH_TOKEN: refreshToken ? 'SET' : 'MISSING',
   });
 
   let payload = {};

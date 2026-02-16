@@ -26,7 +26,20 @@ async function fetchWithRetry(url, options, maxRetries = 3, context = '') {
   const retryable = new Set([408, 429, 503]);
 
   for (let i = 0; i < maxRetries; i++) {
-    const res = await fetch(url, options);
+    let res;
+    try {
+      res = await fetch(url, options);
+    } catch (err) {
+      const isLastAttempt = i === maxRetries - 1;
+      const delayMs = Math.min(5, Math.pow(2, i)) * 1000;
+
+      console.warn(
+        `[${context || 'Fetch'}] Network error on attempt ${i + 1}/${maxRetries}: ${err?.message || err}`
+      );
+      if (isLastAttempt) break;
+      await new Promise((r) => setTimeout(r, delayMs));
+      continue;
+    }
 
     if (!retryable.has(res.status)) return res;
 
@@ -221,7 +234,8 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Missing playlistId or youtubeApiKey' });
       }
 
-      const hours = Number.isFinite(Number(hoursBack)) ? parseInt(hoursBack, 10) : 168;
+      const parsedHours = Number(hoursBack);
+      const hours = Number.isInteger(parsedHours) && parsedHours > 0 ? parsedHours : 168;
 
       const playlistTitle = await getPlaylistTitle(playlistId, youtubeApiKey);
       const videos = await getRecentVideos(playlistId, youtubeApiKey, hours);
