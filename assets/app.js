@@ -39,6 +39,59 @@ function sanitizeHtml(html) {
     return template.innerHTML;
 }
 
+// ---------------------------------------------------------------------------
+// Debug logging - persists to localStorage for post-mortem investigation.
+// View logs by appending ?debug=1 to the page URL.
+// ---------------------------------------------------------------------------
+const DEBUG_LOG_KEY = 'yps_debug_log';
+const DEBUG_MAX_ENTRIES = 100;
+
+function debugLog(category, data) {
+    try {
+        const existing = localStorage.getItem(DEBUG_LOG_KEY);
+        const logs = existing ? JSON.parse(existing) : [];
+        logs.push({ ts: new Date().toISOString(), cat: category, data });
+        if (logs.length > DEBUG_MAX_ENTRIES) logs.splice(0, logs.length - DEBUG_MAX_ENTRIES);
+        localStorage.setItem(DEBUG_LOG_KEY, JSON.stringify(logs));
+    } catch (_) { /* ignore quota/parse errors */ }
+}
+
+function showDebugPanel() {
+    const existing = document.getElementById('debugPanel');
+    if (existing) { existing.remove(); return; }
+
+    let logs = [];
+    try { logs = JSON.parse(localStorage.getItem(DEBUG_LOG_KEY) || '[]'); } catch (_) { }
+
+    const panel = document.createElement('div');
+    panel.id = 'debugPanel';
+    panel.style.cssText = [
+        'position:fixed', 'top:10px', 'right:10px', 'width:640px', 'max-width:92vw',
+        'height:80vh', 'background:#111', 'color:#e0e0e0', 'border:1px solid #555',
+        'border-radius:8px', 'padding:12px', 'z-index:9999', 'display:flex',
+        'flex-direction:column', 'font-family:monospace', 'font-size:11px', 'box-shadow:0 4px 24px #0008'
+    ].join(';');
+
+    const copyAll = `navigator.clipboard.writeText(localStorage.getItem('${DEBUG_LOG_KEY}')||'[]').then(()=>alert('Copied to clipboard'))`;
+    const clearAll = `localStorage.removeItem('${DEBUG_LOG_KEY}');document.getElementById('debugPanel').remove()`;
+    panel.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0">
+            <strong>YPS Debug Logs &mdash; ${logs.length} entries</strong>
+            <div style="display:flex;gap:6px">
+                <button onclick="${copyAll}" style="padding:3px 8px;cursor:pointer;border-radius:4px">Copy all</button>
+                <button onclick="${clearAll}" style="padding:3px 8px;cursor:pointer;border-radius:4px">Clear</button>
+                <button onclick="document.getElementById('debugPanel').remove()" style="padding:3px 8px;cursor:pointer;border-radius:4px">&#x2715;</button>
+            </div>
+        </div>
+        <pre id="debugLogContent" style="overflow:auto;flex:1;margin:0;white-space:pre-wrap;word-break:break-all;line-height:1.5">${
+            logs.length
+                ? logs.map(l => `[${l.ts}] [${l.cat}]\n${JSON.stringify(l.data, null, 2)}`).join('\n\n---\n\n')
+                : 'No logs yet. Run a summarization and check back.'
+        }</pre>`;
+
+    document.body.appendChild(panel);
+}
+
 // API base path - auto-detect platform (Vercel vs Netlify)
 // Netlify uses /.netlify/functions, Vercel uses /api
 // Default to Vercel (/api) unless we detect Netlify hostname
@@ -297,7 +350,31 @@ function createVideoCard(video) {
 
     // Convert LaTeX to Unicode before markdown parsing
     const summaryWithUnicode = latexAllToUnicode(summaryText);
-    const summaryHtml = sanitizeHtml(marked.parse(summaryWithUnicode));
+    let summaryHtml;
+    try {
+        if (typeof marked === 'undefined' || typeof marked.parse !== 'function') {
+            throw new Error(`marked not available (typeof marked="${typeof marked}")`);
+        }
+        const parsed = marked.parse(summaryWithUnicode);
+        debugLog('render_ok', {
+            videoId: video.videoId,
+            inputLen: summaryWithUnicode.length,
+            outputLen: parsed ? parsed.length : 0,
+            inputPreview: summaryWithUnicode.substring(0, 200)
+        });
+        summaryHtml = sanitizeHtml(parsed);
+    } catch (renderErr) {
+        debugLog('render_error', {
+            videoId: video.videoId,
+            error: renderErr.message,
+            markedType: typeof marked,
+            markedParseFn: typeof marked !== 'undefined' ? typeof marked.parse : 'n/a',
+            inputLen: summaryWithUnicode.length,
+            inputPreview: summaryWithUnicode.substring(0, 200)
+        });
+        // Fallback: display raw text in a preformatted block so content is still readable
+        summaryHtml = `<pre style="white-space:pre-wrap;word-break:break-word">${escapeHtml(summaryWithUnicode)}</pre>`;
+    }
     const thumbnailUrl = `https://img.youtube.com/vi/${video.videoId}/mqdefault.jpg`;
     const isRtl = video.language === 'ar';
 
@@ -431,6 +508,13 @@ async function summarizePlaylist() {
                 }
 
                 const result = await processResponse.json();
+                debugLog('api_process', {
+                    videoId: video.videoId,
+                    httpStatus: processResponse.status,
+                    resultStatus: result.status,
+                    summaryLen: result.summary ? result.summary.length : 0,
+                    summaryPreview: result.summary ? result.summary.substring(0, 200) : null
+                });
                 results.push(result);
 
                 // Update UI immediately with this result
@@ -641,6 +725,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // Open settings modal if not configured
     if (!settings.playlistId || !settings.youtubeKey || !settings.claudeKey || !settings.transcriptKey) {
         setTimeout(openModal, 500);
+    }
+
+    // Log startup diagnostics for post-mortem debugging
+    debugLog('startup', {
+        markedDefined: typeof marked !== 'undefined',
+        markedParseFn: typeof marked !== 'undefined' ? typeof marked.parse : 'n/a',
+        markedVersion: (typeof marked !== 'undefined' && marked.defaults && marked.defaults.version) || 'unknown',
+        userAgent: navigator.userAgent,
+        apiBase: API_BASE,
+        url: window.location.pathname
+    });
+
+    // Show debug panel if ?debug=1 is present in the URL
+    if (new URLSearchParams(window.location.search).get('debug') === '1') {
+        setTimeout(showDebugPanel, 300);
     }
 });
 
