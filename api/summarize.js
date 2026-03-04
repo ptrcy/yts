@@ -204,7 +204,8 @@ ${transcript.substring(0, 70000)}`;
   // Collect the stream into a string (keeps your JSON response shape unchanged)
   let out = '';
   for await (const chunk of result.textStream) out += chunk;
-  return out.trim();
+  // Strip wrapping ```markdown ... ``` fence if the model added one
+  return out.replace(/^```(?:markdown)?\n([\s\S]*)\n```\s*$/, '$1').trim();
 }
 
 // Set CORS headers

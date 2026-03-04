@@ -228,7 +228,9 @@ ${transcript.substring(0, 70000)}`;
 
   for (const block of data?.content || []) {
     if (block.type === 'text') {
-      return block.text;
+      // Claude sometimes wraps the response in a ```markdown ... ``` fence.
+      // Strip it so the caller receives plain markdown, not a code block.
+      return block.text.replace(/^```(?:markdown)?\n([\s\S]*)\n```\s*$/, '$1').trim();
     }
   }
 
