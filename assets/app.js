@@ -517,19 +517,21 @@ async function summarizePlaylist() {
                 });
                 results.push(result);
 
-                // Update UI immediately with this result
-                elements.resultsGrid.innerHTML = results.map(createVideoCard).join('');
+                // Update UI immediately with this result without re-rendering existing cards
+                // This prevents deleted cards from reappearing
+                elements.resultsGrid.insertAdjacentHTML('beforeend', createVideoCard(result));
                 const successCount = results.filter(v => v.status === 'success').length;
                 elements.resultsMeta.textContent = `${successCount} of ${videos.length} videos summarized`;
 
             } catch (err) {
                 console.error(`Error processing ${video.title}:`, err);
-                results.push({
+                const errorResult = {
                     ...video,
                     summary: `Error: ${err.message}`,
                     status: 'failed'
-                });
-                elements.resultsGrid.innerHTML = results.map(createVideoCard).join('');
+                };
+                results.push(errorResult);
+                elements.resultsGrid.insertAdjacentHTML('beforeend', createVideoCard(errorResult));
             }
         }
 
