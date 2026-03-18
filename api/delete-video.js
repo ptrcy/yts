@@ -7,7 +7,6 @@
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const PLAYLIST_ITEMS_URL = "https://www.googleapis.com/youtube/v3/playlistItems";
-const DELETE_URL = "https://www.googleapis.com/youtube/v3/playlistItems";
 
 // Retry logic for fetch requests
 async function fetchWithRetry(url, options, maxRetries = 3, context = '') {
@@ -72,8 +71,10 @@ async function exchangeRefreshToken({ clientId, clientSecret, refreshToken }) {
 
 async function findPlaylistItemId({ playlistId, videoId, accessToken }) {
   let pageToken = null;
+  let pages = 0;
+  const MAX_PAGES = 20; // cap at 1000 items to avoid quota exhaustion
 
-  while (true) {
+  while (pages++ < MAX_PAGES) {
     const url = new URL(PLAYLIST_ITEMS_URL);
     url.searchParams.set("part", "id,snippet");
     url.searchParams.set("playlistId", playlistId);
@@ -105,7 +106,7 @@ async function findPlaylistItemId({ playlistId, videoId, accessToken }) {
 }
 
 async function deletePlaylistItem({ playlistItemId, accessToken }) {
-  const url = new URL(DELETE_URL);
+  const url = new URL(PLAYLIST_ITEMS_URL);
   url.searchParams.set("id", playlistItemId);
 
   const res = await fetchWithRetry(url.toString(), {

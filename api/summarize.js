@@ -164,7 +164,7 @@ async function getRecentVideos(playlistId, apiKey, hoursBack) {
       const lastDate = new Date(data.items[data.items.length - 1].snippet.publishedAt);
       if (lastDate < cutoffDate) break;
     }
-  } while (nextPageToken && videos.length < 50);
+  } while (nextPageToken);
 
   return videos;
 }

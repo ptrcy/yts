@@ -30,7 +30,7 @@ function sanitizeHtml(html) {
             }
 
             if ((name === 'href' || name === 'src' || name === 'xlink:href') &&
-                (value.startsWith('javascript:') || value.startsWith('data:text/html'))) {
+                (value.startsWith('javascript:') || value.startsWith('data:text/html') || value.startsWith('data:image/svg'))) {
                 el.removeAttribute(attr.name);
             }
         }
@@ -197,7 +197,8 @@ function saveSettings() {
 function updatePlaylistBadge(playlistId) {
     if (playlistId) {
         elements.playlistBadge.classList.add('configured');
-        elements.playlistStatus.textContent = `Playlist: ${playlistId.substring(0, 20)}...`;
+        const label = playlistId.length > 20 ? `${playlistId.substring(0, 20)}...` : playlistId;
+        elements.playlistStatus.textContent = `Playlist: ${label}`;
     } else {
         elements.playlistBadge.classList.remove('configured');
         elements.playlistStatus.textContent = 'No playlist configured';
@@ -463,6 +464,10 @@ async function summarizePlaylist() {
         });
 
         if (!listResponse.ok) {
+            const ct = listResponse.headers.get('content-type') || '';
+            if (!ct.includes('application/json')) {
+                throw new Error(`Failed to fetch playlist (HTTP ${listResponse.status})`);
+            }
             const error = await listResponse.json();
             throw new Error(error.error || 'Failed to fetch playlist');
         }
