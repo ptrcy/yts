@@ -60,9 +60,21 @@ class YouTubePlaylistSummarizer:
             )
             response = request.execute()
 
-            for item in response['items']:
-                snippet = item['snippet']
-                published_str = snippet['publishedAt'].replace('Z', '+00:00')
+            for item in response.get('items', []):
+                snippet = item.get('snippet') or {}
+                content_details = item.get('contentDetails') or {}
+                video_id = content_details.get('videoId')
+                title = snippet.get('title')
+
+                # Skip deleted/private videos with missing data.
+                if not video_id or not title or title in ('Private video', 'Deleted video'):
+                    continue
+
+                published_raw = snippet.get('publishedAt')
+                if not published_raw:
+                    continue
+
+                published_str = published_raw.replace('Z', '+00:00')
                 published_at = datetime.fromisoformat(published_str)
                 if published_at.tzinfo is None:
                     published_at = published_at.replace(tzinfo=timezone.utc)
@@ -70,10 +82,10 @@ class YouTubePlaylistSummarizer:
                 # Only include videos published within the date range
                 if published_at >= self.cutoff_date:
                     video_info = VideoInfo(
-                        video_id=item['contentDetails']['videoId'],
-                        title=snippet['title'],
+                        video_id=video_id,
+                        title=title,
                         published_at=published_at,
-                        channel_title=snippet['channelTitle']
+                        channel_title=snippet.get('channelTitle', 'Unknown Channel')
                     )
                     recent_videos.append(video_info)
 
@@ -166,9 +178,9 @@ Transcript:
             for block in message.content:
                 if hasattr(block, 'text'):
                     return block.text
-            return "Error: No text content in response"
+            raise RuntimeError("No text content in response")
         except Exception as e:
-            return f"Error generating summary: {e}"
+            raise RuntimeError(f"Error generating summary: {e}") from e
 
     def process_video(self, video: VideoInfo) -> Dict:
         """Process a single video: download transcript and summarize."""
@@ -189,15 +201,23 @@ Transcript:
         
         # Generate summary
         print(f"  Generating summary...")
-        summary = self.summarize_transcript(transcript, video.title)
-        print(f"  ✓ Summary generated")
-        
-        return {
-            'video': video,
-            'transcript': transcript,
-            'summary': summary,
-            'status': 'success'
-        }
+        try:
+            summary = self.summarize_transcript(transcript, video.title)
+            print(f"  ✓ Summary generated")
+            return {
+                'video': video,
+                'transcript': transcript,
+                'summary': summary,
+                'status': 'success'
+            }
+        except RuntimeError as e:
+            print(f"  ✗ Summary generation failed: {e}")
+            return {
+                'video': video,
+                'transcript': transcript,
+                'summary': f'Error: {e}',
+                'status': 'failed'
+            }
 
     def process_playlist(self, playlist_id: str, max_workers: int = 5) -> List[Dict]:
         """

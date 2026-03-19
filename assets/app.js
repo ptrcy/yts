@@ -420,9 +420,9 @@ function createVideoCard(video) {
             <div class="video-summary">
                 <h4>Summary</h4>
                 <div class="summary-content${isRtl ? ' rtl' : ''}">${summaryHtml}</div>
-                <button class="delete-btn" title="Remove from list">
+                <button class="delete-btn" title="Remove video from playlist">
                     <svg><use href="#icon-trash"/></svg>
-                    Delete Summary
+                    Remove from Playlist
                 </button>
             </div>
         </article>

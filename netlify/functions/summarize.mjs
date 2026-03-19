@@ -1,5 +1,5 @@
 // Netlify serverless function for YouTube Playlist Summarizer
-// Uses YouTube Data API, TranscriptAPI for transcripts, and OpenAI API for summaries
+// Uses YouTube Data API, Supadata for transcripts, and OpenAI API for summaries
 
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com';
@@ -60,45 +60,72 @@ const headers = {
   'Content-Type': 'application/json'
 };
 
-// Fetch transcript using TranscriptAPI
+// Fetch transcript using Supadata (handles both immediate and async job responses)
 async function fetchTranscript(videoId, transcriptApiKey) {
-  // TranscriptAPI expects a video_url. Passing only the ID often fails.
-  const videoUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
-
+  const supadataHeaders = { 'x-api-key': transcriptApiKey };
   const params = new URLSearchParams({
-    video_url: videoUrl,
-    format: 'text',
-    include_timestamp: 'false',
-    send_metadata: 'true'
+    url: `https://www.youtube.com/watch?v=${videoId}`,
+    text: 'true'
   });
 
   const response = await fetchWithRetry(
-    `https://transcriptapi.com/api/v2/youtube/transcript?${params.toString()}`,
-    {
-      headers: {
-        Authorization: `Bearer ${transcriptApiKey}`
-      }
-    },
+    `https://api.supadata.ai/v1/transcript?${params.toString()}`,
+    { headers: supadataHeaders },
     3,
-    `TranscriptAPI[${videoId}]`
+    `Supadata[${videoId}]`
   );
 
-  const data = await safeParseJson(response, `TranscriptAPI[${videoId}]`);
+  const data = await safeParseJson(response, `Supadata[${videoId}]`);
 
   if (!response.ok) {
-    console.error(`[TranscriptAPI] Error for ${videoId}:`, data);
+    console.error(`[Supadata] Error for ${videoId}:`, data);
     throw new Error(data?.message || `Transcript API error: ${response.status}`);
   }
 
-  if (data?.transcript) {
-    return {
-      text: data.transcript,
-      language: data.language || null
-    };
+  // Immediate response
+  if (data?.content) {
+    return { text: data.content, language: data.lang || null };
   }
 
-  console.error(`[TranscriptAPI] No transcript in response for ${videoId}:`, data);
-  throw new Error('No transcript available');
+  // Async job response - poll for result
+  const jobId = data?.jobId || data?.job_id;
+  if (!jobId) {
+    console.error(`[Supadata] No content or jobId in response for ${videoId}:`, data);
+    throw new Error('No transcript available');
+  }
+
+  const MAX_POLLS = 30;
+  const POLL_INTERVAL_MS = 2000;
+
+  for (let i = 0; i < MAX_POLLS; i++) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+
+    const pollResponse = await fetchWithRetry(
+      `https://api.supadata.ai/v1/transcript/${encodeURIComponent(jobId)}`,
+      { headers: supadataHeaders },
+      3,
+      `Supadata/job[${jobId}]`
+    );
+
+    const pollData = await safeParseJson(pollResponse, `Supadata/job[${jobId}]`);
+
+    if (!pollResponse.ok) {
+      console.error(`[Supadata] Poll error for job ${jobId}:`, pollData);
+      throw new Error(pollData?.message || `Transcript job poll error: ${pollResponse.status}`);
+    }
+
+    if (pollData?.status === 'completed' && pollData?.content) {
+      return { text: pollData.content, language: pollData.lang || null };
+    }
+
+    if (pollData?.status === 'failed') {
+      throw new Error(`Supadata transcript job failed: ${pollData?.message || jobId}`);
+    }
+
+    console.log(`[Supadata] Job ${jobId} status: ${pollData?.status} (poll ${i + 1}/${MAX_POLLS})`);
+  }
+
+  throw new Error('Supadata timed out waiting for transcript');
 }
 
 // Fetch playlist info
@@ -165,7 +192,7 @@ async function getRecentVideos(playlistId, apiKey, hoursBack) {
       const lastDate = new Date(data.items[data.items.length - 1].snippet.publishedAt);
       if (lastDate < cutoffDate) break;
     }
-  } while (nextPageToken && videos.length < 50);
+  } while (nextPageToken);
 
   return videos;
 }

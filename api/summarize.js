@@ -60,10 +60,13 @@ async function fetchWithRetry(url, options, maxRetries = 3, context = '') {
 // Fetch transcript using Supadata (handles both immediate and async job responses)
 async function fetchTranscript(videoId, transcriptApiKey) {
   const supadataHeaders = { 'x-api-key': transcriptApiKey };
-  const params = new URLSearchParams({ videoId, text: 'true' });
+  const params = new URLSearchParams({
+    url: `https://www.youtube.com/watch?v=${videoId}`,
+    text: 'true',
+  });
 
   const response = await fetchWithRetry(
-    `https://api.supadata.ai/v1/youtube/transcript?${params.toString()}`,
+    `https://api.supadata.ai/v1/transcript?${params.toString()}`,
     { headers: supadataHeaders },
     3,
     `Supadata[${videoId}]`
@@ -82,9 +85,9 @@ async function fetchTranscript(videoId, transcriptApiKey) {
   }
 
   // Async job response — poll for result
-  const jobId = data?.job_id;
+  const jobId = data?.jobId || data?.job_id;
   if (!jobId) {
-    console.error(`[Supadata] No content or job_id in response for ${videoId}:`, data);
+    console.error(`[Supadata] No content or jobId in response for ${videoId}:`, data);
     throw new Error('No transcript available');
   }
 
