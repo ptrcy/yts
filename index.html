@@ -103,17 +103,23 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">
-                        Claude API Key <span class="required">*</span>
+                        OpenAI API Key <span class="required">*</span>
                     </label>
-                    <input type="password" class="form-input" id="claudeKeyInput" placeholder="sk-ant-..."
+                    <input type="password" class="form-input" id="openaiKeyInput" placeholder="sk-..."
                         autocomplete="one-time-code" data-form-type="other">
-                    <p class="form-hint">Get from console.anthropic.com</p>
+                    <p class="form-hint">Get from platform.openai.com</p>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Claude API Base URL</label>
-                    <input type="text" class="form-input" id="claudeBaseUrlInput"
-                        placeholder="https://api.anthropic.com">
-                    <p class="form-hint">Optional: Custom API endpoint (leave empty for default Anthropic)</p>
+                    <label class="form-label">OpenAI Base URL</label>
+                    <input type="text" class="form-input" id="openaiBaseUrlInput"
+                        placeholder="https://api.openai.com">
+                    <p class="form-hint">Optional: Custom API endpoint (leave empty for default OpenAI)</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Model Name</label>
+                    <input type="text" class="form-input" id="openaiModelInput"
+                        placeholder="gpt-4o-mini">
+                    <p class="form-hint">Optional: Model to use for summarization (default: gpt-4o-mini)</p>
                 </div>
                 <div class="form-group">
                     <label class="form-label">

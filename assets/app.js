@@ -104,8 +104,9 @@ const STORAGE_KEYS = {
     playlistId: 'yps_playlist_id',
     hoursBack: 'yps_hours_back',
     youtubeKey: 'yps_youtube_key',
-    claudeKey: 'yps_claude_key',
-    claudeBaseUrl: 'yps_claude_base_url',
+    openaiKey: 'yps_openai_key',
+    openaiBaseUrl: 'yps_openai_base_url',
+    openaiModel: 'yps_openai_model',
     transcriptKey: 'yps_transcript_key',
     theme: 'yps_theme'
 };
@@ -140,8 +141,9 @@ const elements = {
     playlistIdInput: document.getElementById('playlistIdInput'),
     hoursBackInput: document.getElementById('hoursBackInput'),
     youtubeKeyInput: document.getElementById('youtubeKeyInput'),
-    claudeKeyInput: document.getElementById('claudeKeyInput'),
-    claudeBaseUrlInput: document.getElementById('claudeBaseUrlInput'),
+    openaiKeyInput: document.getElementById('openaiKeyInput'),
+    openaiBaseUrlInput: document.getElementById('openaiBaseUrlInput'),
+    openaiModelInput: document.getElementById('openaiModelInput'),
     transcriptKeyInput: document.getElementById('transcriptKeyInput')
 };
 
@@ -151,16 +153,18 @@ function loadSettings() {
         playlistId: localStorage.getItem(STORAGE_KEYS.playlistId) || '',
         hoursBack: localStorage.getItem(STORAGE_KEYS.hoursBack) || '168',
         youtubeKey: localStorage.getItem(STORAGE_KEYS.youtubeKey) || '',
-        claudeKey: localStorage.getItem(STORAGE_KEYS.claudeKey) || '',
-        claudeBaseUrl: localStorage.getItem(STORAGE_KEYS.claudeBaseUrl) || '',
+        openaiKey: localStorage.getItem(STORAGE_KEYS.openaiKey) || '',
+        openaiBaseUrl: localStorage.getItem(STORAGE_KEYS.openaiBaseUrl) || '',
+        openaiModel: localStorage.getItem(STORAGE_KEYS.openaiModel) || '',
         transcriptKey: localStorage.getItem(STORAGE_KEYS.transcriptKey) || ''
     };
 
     elements.playlistIdInput.value = settings.playlistId;
     elements.hoursBackInput.value = settings.hoursBack;
     elements.youtubeKeyInput.value = settings.youtubeKey;
-    elements.claudeKeyInput.value = settings.claudeKey;
-    elements.claudeBaseUrlInput.value = settings.claudeBaseUrl;
+    elements.openaiKeyInput.value = settings.openaiKey;
+    elements.openaiBaseUrlInput.value = settings.openaiBaseUrl;
+    elements.openaiModelInput.value = settings.openaiModel;
     elements.transcriptKeyInput.value = settings.transcriptKey;
 
     updatePlaylistBadge(settings.playlistId);
@@ -172,11 +176,12 @@ function saveSettings() {
     const playlistId = elements.playlistIdInput.value.trim();
     const hoursBack = elements.hoursBackInput.value || '168';
     const youtubeKey = elements.youtubeKeyInput.value.trim();
-    const claudeKey = elements.claudeKeyInput.value.trim();
-    const claudeBaseUrl = elements.claudeBaseUrlInput.value.trim();
+    const openaiKey = elements.openaiKeyInput.value.trim();
+    const openaiBaseUrl = elements.openaiBaseUrlInput.value.trim();
+    const openaiModel = elements.openaiModelInput.value.trim();
     const transcriptKey = elements.transcriptKeyInput.value.trim();
 
-    if (!playlistId || !youtubeKey || !claudeKey || !transcriptKey) {
+    if (!playlistId || !youtubeKey || !openaiKey || !transcriptKey) {
         showToast('Please fill in all required fields', 'error');
         return false;
     }
@@ -184,8 +189,9 @@ function saveSettings() {
     localStorage.setItem(STORAGE_KEYS.playlistId, playlistId);
     localStorage.setItem(STORAGE_KEYS.hoursBack, hoursBack);
     localStorage.setItem(STORAGE_KEYS.youtubeKey, youtubeKey);
-    localStorage.setItem(STORAGE_KEYS.claudeKey, claudeKey);
-    localStorage.setItem(STORAGE_KEYS.claudeBaseUrl, claudeBaseUrl);
+    localStorage.setItem(STORAGE_KEYS.openaiKey, openaiKey);
+    localStorage.setItem(STORAGE_KEYS.openaiBaseUrl, openaiBaseUrl);
+    localStorage.setItem(STORAGE_KEYS.openaiModel, openaiModel);
     localStorage.setItem(STORAGE_KEYS.transcriptKey, transcriptKey);
 
     updatePlaylistBadge(playlistId);
@@ -224,8 +230,9 @@ function exportConfig() {
         playlistId: localStorage.getItem(STORAGE_KEYS.playlistId) || '',
         hoursBack: localStorage.getItem(STORAGE_KEYS.hoursBack) || '168',
         youtubeKey: localStorage.getItem(STORAGE_KEYS.youtubeKey) || '',
-        claudeKey: localStorage.getItem(STORAGE_KEYS.claudeKey) || '',
-        claudeBaseUrl: localStorage.getItem(STORAGE_KEYS.claudeBaseUrl) || '',
+        openaiKey: localStorage.getItem(STORAGE_KEYS.openaiKey) || '',
+        openaiBaseUrl: localStorage.getItem(STORAGE_KEYS.openaiBaseUrl) || '',
+        openaiModel: localStorage.getItem(STORAGE_KEYS.openaiModel) || '',
         transcriptKey: localStorage.getItem(STORAGE_KEYS.transcriptKey) || ''
     };
 
@@ -258,7 +265,7 @@ async function importConfig() {
         }
 
         // Validate config structure
-        const validKeys = ['playlistId', 'hoursBack', 'youtubeKey', 'claudeKey', 'claudeBaseUrl', 'transcriptKey'];
+        const validKeys = ['playlistId', 'hoursBack', 'youtubeKey', 'openaiKey', 'openaiBaseUrl', 'openaiModel', 'transcriptKey'];
         const hasValidKey = validKeys.some(key => key in config);
 
         if (!hasValidKey) {
@@ -276,11 +283,14 @@ async function importConfig() {
         if (config.youtubeKey !== undefined) {
             localStorage.setItem(STORAGE_KEYS.youtubeKey, config.youtubeKey);
         }
-        if (config.claudeKey !== undefined) {
-            localStorage.setItem(STORAGE_KEYS.claudeKey, config.claudeKey);
+        if (config.openaiKey !== undefined) {
+            localStorage.setItem(STORAGE_KEYS.openaiKey, config.openaiKey);
         }
-        if (config.claudeBaseUrl !== undefined) {
-            localStorage.setItem(STORAGE_KEYS.claudeBaseUrl, config.claudeBaseUrl);
+        if (config.openaiBaseUrl !== undefined) {
+            localStorage.setItem(STORAGE_KEYS.openaiBaseUrl, config.openaiBaseUrl);
+        }
+        if (config.openaiModel !== undefined) {
+            localStorage.setItem(STORAGE_KEYS.openaiModel, config.openaiModel);
         }
         if (config.transcriptKey !== undefined) {
             localStorage.setItem(STORAGE_KEYS.transcriptKey, config.transcriptKey);
@@ -431,12 +441,13 @@ async function summarizePlaylist() {
         playlistId: localStorage.getItem(STORAGE_KEYS.playlistId),
         hoursBack: parseInt(localStorage.getItem(STORAGE_KEYS.hoursBack)) || 168,
         youtubeApiKey: localStorage.getItem(STORAGE_KEYS.youtubeKey),
-        claudeApiKey: localStorage.getItem(STORAGE_KEYS.claudeKey),
-        claudeBaseUrl: localStorage.getItem(STORAGE_KEYS.claudeBaseUrl) || '',
+        openaiApiKey: localStorage.getItem(STORAGE_KEYS.openaiKey),
+        openaiBaseUrl: localStorage.getItem(STORAGE_KEYS.openaiBaseUrl) || '',
+        openaiModel: localStorage.getItem(STORAGE_KEYS.openaiModel) || '',
         transcriptApiKey: localStorage.getItem(STORAGE_KEYS.transcriptKey)
     };
 
-    if (!settings.playlistId || !settings.youtubeApiKey || !settings.claudeApiKey || !settings.transcriptApiKey) {
+    if (!settings.playlistId || !settings.youtubeApiKey || !settings.openaiApiKey || !settings.transcriptApiKey) {
         showToast('Please configure your settings first', 'error');
         openModal();
         return;
@@ -501,8 +512,9 @@ async function summarizePlaylist() {
                     body: JSON.stringify({
                         action: 'process',
                         video,
-                        claudeApiKey: settings.claudeApiKey,
-                        claudeBaseUrl: settings.claudeBaseUrl,
+                        openaiApiKey: settings.openaiApiKey,
+                        openaiBaseUrl: settings.openaiBaseUrl,
+                        openaiModel: settings.openaiModel,
                         transcriptApiKey: settings.transcriptApiKey
                     })
                 });
@@ -730,7 +742,7 @@ initTheme(); // Apply theme immediately to prevent flash
 document.addEventListener('DOMContentLoaded', () => {
     const settings = loadSettings();
     // Open settings modal if not configured
-    if (!settings.playlistId || !settings.youtubeKey || !settings.claudeKey || !settings.transcriptKey) {
+    if (!settings.playlistId || !settings.youtubeKey || !settings.openaiKey || !settings.transcriptKey) {
         setTimeout(openModal, 500);
     }
 

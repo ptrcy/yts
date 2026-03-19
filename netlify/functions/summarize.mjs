@@ -1,8 +1,9 @@
 // Netlify serverless function for YouTube Playlist Summarizer
-// Uses YouTube Data API, TranscriptAPI for transcripts, and Claude API for summaries
+// Uses YouTube Data API, TranscriptAPI for transcripts, and OpenAI API for summaries
 
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
-const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com';
+const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com';
+const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 
 // Safe JSON parser with detailed error logging
 async function safeParseJson(response, context) {
@@ -176,9 +177,10 @@ const NATIVE_LANGUAGE_NAMES = {
   ar: 'Arabic'
 };
 
-// Summarize transcript using Claude
-async function summarizeTranscript(transcript, title, claudeApiKey, claudeBaseUrl, language) {
-  const baseUrl = claudeBaseUrl || DEFAULT_CLAUDE_BASE_URL;
+// Summarize transcript using OpenAI
+async function summarizeTranscript(transcript, title, openaiApiKey, openaiBaseUrl, model, language) {
+  const baseUrl = (openaiBaseUrl || DEFAULT_OPENAI_BASE_URL).replace(/\/$/, '');
+  const resolvedModel = model || DEFAULT_OPENAI_MODEL;
 
   const nativeLang = NATIVE_LANGUAGE_NAMES[language];
   const langInstruction = nativeLang
@@ -198,16 +200,15 @@ Transcript:
 ${transcript.substring(0, 70000)}`;
 
   const response = await fetchWithRetry(
-    `${baseUrl}/v1/messages`,
+    `${baseUrl}/v1/chat/completions`,
     {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': claudeApiKey,
-        'anthropic-version': '2023-06-01'
+        'Authorization': `Bearer ${openaiApiKey}`
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
+        model: resolvedModel,
         max_tokens: 2000,
         messages: [{
           role: 'user',
@@ -216,25 +217,23 @@ ${transcript.substring(0, 70000)}`;
       })
     },
     3,
-    `Claude[${title.substring(0, 30)}]`
+    `OpenAI[${title.substring(0, 30)}]`
   );
 
-  const data = await safeParseJson(response, `Claude[${title.substring(0, 30)}]`);
+  const data = await safeParseJson(response, `OpenAI[${title.substring(0, 30)}]`);
 
   if (!response.ok) {
-    console.error(`[Claude] Error for "${title}":`, data);
+    console.error(`[OpenAI] Error for "${title}":`, data);
     throw new Error(data?.error?.message || 'Failed to generate summary');
   }
 
-  for (const block of data?.content || []) {
-    if (block.type === 'text') {
-      // Claude sometimes wraps the response in a ```markdown ... ``` fence.
-      // Strip it so the caller receives plain markdown, not a code block.
-      return block.text.replace(/^```(?:markdown)?\n([\s\S]*)\n```\s*$/, '$1').trim();
-    }
+  const content = data?.choices?.[0]?.message?.content;
+  if (content) {
+    // Some models wrap the response in a ```markdown ... ``` fence — strip it.
+    return content.replace(/^```(?:markdown)?\n([\s\S]*)\n```\s*$/, '$1').trim();
   }
 
-  console.error(`[Claude] No text block in response for "${title}":`, data);
+  console.error(`[OpenAI] No content in response for "${title}":`, data);
   throw new Error('No summary generated');
 }
 
@@ -283,19 +282,19 @@ export async function handler(event) {
 
     // ACTION: PROCESS - Process a single video
     if (action === 'process') {
-      const { video, claudeApiKey, claudeBaseUrl, transcriptApiKey } = body;
+      const { video, openaiApiKey, openaiBaseUrl, openaiModel, transcriptApiKey } = body;
 
-      if (!video || !claudeApiKey || !transcriptApiKey) {
+      if (!video || !openaiApiKey || !transcriptApiKey) {
         return {
           statusCode: 400,
           headers,
-          body: JSON.stringify({ error: 'Missing video, claudeApiKey, or transcriptApiKey' })
+          body: JSON.stringify({ error: 'Missing video, openaiApiKey, or transcriptApiKey' })
         };
       }
 
       try {
         const { text: transcript, language } = await fetchTranscript(video.videoId, transcriptApiKey);
-        const summary = await summarizeTranscript(transcript, video.title, claudeApiKey, claudeBaseUrl, language);
+        const summary = await summarizeTranscript(transcript, video.title, openaiApiKey, openaiBaseUrl, openaiModel, language);
 
         return {
           statusCode: 200,

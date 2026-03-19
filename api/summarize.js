@@ -1,9 +1,9 @@
 // Vercel serverless function for YouTube Playlist Summarizer
-// Uses YouTube Data API, TranscriptAPI for transcripts, and Vercel AI SDK (Gemini) for summaries
-
-import { streamText } from 'ai';
+// Uses YouTube Data API, TranscriptAPI for transcripts, and OpenAI API for summaries
 
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
+const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com';
+const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 
 // Safe JSON parser with detailed error logging
 async function safeParseJson(response, context) {
@@ -176,8 +176,11 @@ const NATIVE_LANGUAGE_NAMES = {
   ar: 'Arabic',
 };
 
-// Summarize transcript using Vercel AI SDK (Gemini)
-async function summarizeTranscript(transcript, title, language) {
+// Summarize transcript using OpenAI
+async function summarizeTranscript(transcript, title, openaiApiKey, openaiBaseUrl, model, language) {
+  const baseUrl = (openaiBaseUrl || DEFAULT_OPENAI_BASE_URL).replace(/\/$/, '');
+  const resolvedModel = model || DEFAULT_OPENAI_MODEL;
+
   const nativeLang = language ? NATIVE_LANGUAGE_NAMES[language] : null;
   const langInstruction = nativeLang
     ? `IMPORTANT: Write your entire summary in ${nativeLang}. Do NOT translate to English.`
@@ -195,17 +198,39 @@ Video Title: ${title}
 Transcript:
 ${transcript.substring(0, 70000)}`;
 
-  // Requires AI_GATEWAY_API_KEY in env
-  const result = streamText({
-    model: 'google/gemini-3-flash',
-    prompt,
-  });
+  const response = await fetchWithRetry(
+    `${baseUrl}/v1/chat/completions`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${openaiApiKey}`,
+      },
+      body: JSON.stringify({
+        model: resolvedModel,
+        max_tokens: 2000,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    },
+    3,
+    `OpenAI[${title.substring(0, 30)}]`
+  );
 
-  // Collect the stream into a string (keeps your JSON response shape unchanged)
-  let out = '';
-  for await (const chunk of result.textStream) out += chunk;
-  // Strip wrapping ```markdown ... ``` fence if the model added one
-  return out.replace(/^```(?:markdown)?\n([\s\S]*)\n```\s*$/, '$1').trim();
+  const data = await safeParseJson(response, `OpenAI[${title.substring(0, 30)}]`);
+
+  if (!response.ok) {
+    console.error(`[OpenAI] Error for "${title}":`, data);
+    throw new Error(data?.error?.message || 'Failed to generate summary');
+  }
+
+  const content = data?.choices?.[0]?.message?.content;
+  if (content) {
+    // Some models wrap the response in a ```markdown ... ``` fence — strip it.
+    return content.replace(/^```(?:markdown)?\n([\s\S]*)\n```\s*$/, '$1').trim();
+  }
+
+  console.error(`[OpenAI] No content in response for "${title}":`, data);
+  throw new Error('No summary generated');
 }
 
 // Set CORS headers
@@ -246,21 +271,15 @@ export default async function handler(req, res) {
 
     // ACTION: PROCESS - Process a single video
     if (action === 'process') {
-      const { video, transcriptApiKey } = req.body || {};
+      const { video, openaiApiKey, openaiBaseUrl, openaiModel, transcriptApiKey } = req.body || {};
 
-      if (!video || !transcriptApiKey) {
-        return res.status(400).json({ error: 'Missing video or transcriptApiKey' });
-      }
-
-      if (!process.env.AI_GATEWAY_API_KEY) {
-        return res.status(400).json({
-          error: 'Missing AI_GATEWAY_API_KEY env var.',
-        });
+      if (!video || !openaiApiKey || !transcriptApiKey) {
+        return res.status(400).json({ error: 'Missing video, openaiApiKey, or transcriptApiKey' });
       }
 
       try {
         const { text: transcript, language } = await fetchTranscript(video.videoId, transcriptApiKey);
-        const summary = await summarizeTranscript(transcript, video.title, language);
+        const summary = await summarizeTranscript(transcript, video.title, openaiApiKey, openaiBaseUrl, openaiModel, language);
 
         return res.status(200).json({
           ...video,
