@@ -9,34 +9,13 @@ function escapeHtml(text) {
         .replace(/'/g, '&#039;');
 }
 
-// Sanitize rendered HTML to prevent script execution from model/API output.
+// Sanitize rendered HTML using DOMPurify
 function sanitizeHtml(html) {
-    const template = document.createElement('template');
-    template.innerHTML = html;
-
-    const blockedTags = ['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta'];
-    blockedTags.forEach((tag) => {
-        template.content.querySelectorAll(tag).forEach((el) => el.remove());
-    });
-
-    template.content.querySelectorAll('*').forEach((el) => {
-        for (const attr of [...el.attributes]) {
-            const name = attr.name.toLowerCase();
-            const value = (attr.value || '').trim().toLowerCase();
-
-            if (name.startsWith('on')) {
-                el.removeAttribute(attr.name);
-                continue;
-            }
-
-            if ((name === 'href' || name === 'src' || name === 'xlink:href') &&
-                (value.startsWith('javascript:') || value.startsWith('data:text/html') || value.startsWith('data:image/svg'))) {
-                el.removeAttribute(attr.name);
-            }
-        }
-    });
-
-    return template.innerHTML;
+    if (typeof DOMPurify !== 'undefined') {
+        return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+    }
+    console.warn('DOMPurify not loaded, falling back to escaping');
+    return `<pre style="white-space:pre-wrap">${escapeHtml(html)}</pre>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -52,8 +31,16 @@ function debugLog(category, data) {
         const logs = existing ? JSON.parse(existing) : [];
         logs.push({ ts: new Date().toISOString(), cat: category, data });
         if (logs.length > DEBUG_MAX_ENTRIES) logs.splice(0, logs.length - DEBUG_MAX_ENTRIES);
-        localStorage.setItem(DEBUG_LOG_KEY, JSON.stringify(logs));
-    } catch (_) { /* ignore quota/parse errors */ }
+        try {
+            localStorage.setItem(DEBUG_LOG_KEY, JSON.stringify(logs));
+        } catch (e) {
+            // If quota exceeded, aggressively trim logs and try again
+            if (logs.length > 20) {
+                logs.splice(0, logs.length - 20);
+                try { localStorage.setItem(DEBUG_LOG_KEY, JSON.stringify(logs)); } catch (_) {}
+            }
+        }
+    } catch (_) { /* ignore format errors */ }
 }
 
 function showDebugPanel() {
@@ -186,13 +173,18 @@ function saveSettings() {
         return false;
     }
 
-    localStorage.setItem(STORAGE_KEYS.playlistId, playlistId);
-    localStorage.setItem(STORAGE_KEYS.hoursBack, hoursBack);
-    localStorage.setItem(STORAGE_KEYS.youtubeKey, youtubeKey);
-    localStorage.setItem(STORAGE_KEYS.openaiKey, openaiKey);
-    localStorage.setItem(STORAGE_KEYS.openaiBaseUrl, openaiBaseUrl);
-    localStorage.setItem(STORAGE_KEYS.openaiModel, openaiModel);
-    localStorage.setItem(STORAGE_KEYS.transcriptKey, transcriptKey);
+    try {
+        localStorage.setItem(STORAGE_KEYS.playlistId, playlistId);
+        localStorage.setItem(STORAGE_KEYS.hoursBack, hoursBack);
+        localStorage.setItem(STORAGE_KEYS.youtubeKey, youtubeKey);
+        localStorage.setItem(STORAGE_KEYS.openaiKey, openaiKey);
+        localStorage.setItem(STORAGE_KEYS.openaiBaseUrl, openaiBaseUrl);
+        localStorage.setItem(STORAGE_KEYS.openaiModel, openaiModel);
+        localStorage.setItem(STORAGE_KEYS.transcriptKey, transcriptKey);
+    } catch (e) {
+        showToast('Storage quota exceeded. Please clear some browser data.', 'error');
+        return false;
+    }
 
     updatePlaylistBadge(playlistId);
     showToast('Settings saved successfully', 'success');
@@ -474,16 +466,16 @@ async function summarizePlaylist() {
             })
         });
 
-        if (!listResponse.ok) {
-            const ct = listResponse.headers.get('content-type') || '';
-            if (!ct.includes('application/json')) {
-                throw new Error(`Failed to fetch playlist (HTTP ${listResponse.status})`);
-            }
-            const error = await listResponse.json();
-            throw new Error(error.error || 'Failed to fetch playlist');
+        let listData;
+        try {
+            listData = await listResponse.json();
+        } catch (e) {
+            throw new Error(`Failed to fetch playlist (HTTP ${listResponse.status})`);
         }
 
-        const listData = await listResponse.json();
+        if (!listResponse.ok) {
+            throw new Error(listData.error || 'Failed to fetch playlist');
+        }
         const { playlistTitle, videos } = listData;
 
         if (videos.length === 0) {
@@ -519,12 +511,16 @@ async function summarizePlaylist() {
                     })
                 });
 
-                const contentType = processResponse.headers.get('content-type') || '';
-                if (!contentType.includes('application/json')) {
-                    throw new Error(`Server returned ${processResponse.status} (non-JSON response)`);
+                let result;
+                try {
+                    result = await processResponse.json();
+                } catch (e) {
+                    throw new Error(`Server returned ${processResponse.status} (invalid JSON)`);
                 }
 
-                const result = await processResponse.json();
+                if (!processResponse.ok) {
+                    throw new Error(result.error || `Server returned ${processResponse.status}`);
+                }
                 debugLog('api_process', {
                     videoId: video.videoId,
                     httpStatus: processResponse.status,

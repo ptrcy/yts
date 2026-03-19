@@ -3,7 +3,21 @@
     "allow": [
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push)"
+      "Bash(git push)",
+      "Bash(git -C \"C:\\\\Users\\\\boutr\\\\hub\\\\tools\\\\python\\\\yps2\\\\yts\" diff api/summarize.js)",
+      "Bash(git -C \"C:\\\\Users\\\\boutr\\\\hub\\\\tools\\\\python\\\\yps2\\\\yts\" add api/summarize.js)",
+      "Bash(git -C \"C:\\\\Users\\\\boutr\\\\hub\\\\tools\\\\python\\\\yps2\\\\yts\" commit -m \"$\\(cat <<''EOF''\nFix truncated api/summarize.js file\n\nRestore missing code that was cut off mid-statement, including the\nGemini API key handling and video processing logic.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C \"C:\\\\Users\\\\boutr\\\\hub\\\\tools\\\\python\\\\yps2\\\\yts\" push)",
+      "Bash(git -C \"C:\\\\Users\\\\boutr\\\\hub\\\\tools\\\\python\\\\yps2\" diff)",
+      "Bash(git -C \"C:\\\\Users\\\\boutr\\\\hub\\\\tools\\\\python\\\\yps2\" log --oneline -3)",
+      "Bash(git -C \"C:\\\\Users\\\\boutr\\\\hub\\\\tools\\\\python\\\\yps2\\\\yts\" status)",
+      "Bash(git -C \"C:\\\\Users\\\\boutr\\\\hub\\\\tools\\\\python\\\\yps2\\\\yts\" log --oneline -3)",
+      "Bash(git -C \"C:\\\\Users\\\\boutr\\\\hub\\\\tools\\\\python\\\\yps2\\\\yts\" add api/summarize.js netlify/functions/summarize.mjs youtube_playlist_summarizer.py)",
+      "Bash(git -C \"C:\\\\Users\\\\boutr\\\\hub\\\\tools\\\\python\\\\yps2\\\\yts\" commit -m \"$\\(cat <<''EOF''\nUpdate summarization prompts to include executive summary\n\nRequest 3-5 sentence executive summary at the start, followed by\ndetailed summary with main points and key takeaways.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "mcp__plugin_context7_context7__query-docs",
+      "Bash(grep:*)",
+      "Bash(find /c/Users/boutr/hub/yts -name *.env -o -name .env* -o -name config* -type f)",
+      "WebFetch(domain:docs.supadata.ai)"
     ]
   }
 }
