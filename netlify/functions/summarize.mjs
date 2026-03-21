@@ -61,7 +61,7 @@ const headers = {
 };
 
 // Fetch transcript using Supadata (handles both immediate and async job responses)
-async function fetchTranscript(videoId, transcriptApiKey) {
+async function fetchTranscriptFromSupadata(videoId, transcriptApiKey) {
   const supadataHeaders = { 'x-api-key': transcriptApiKey };
   const params = new URLSearchParams({
     url: `https://www.youtube.com/watch?v=${videoId}`,
@@ -126,6 +126,53 @@ async function fetchTranscript(videoId, transcriptApiKey) {
   }
 
   throw new Error('Supadata timed out waiting for transcript');
+}
+
+// Fetch transcript using YouTranscripts (fallback)
+async function fetchTranscriptFromYouTranscripts(videoId) {
+  const response = await fetchWithRetry(
+    'https://www.youtranscripts.com/api/transcript/',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36'
+      },
+      body: JSON.stringify({ url: `https://www.youtube.com/watch?v=${videoId}` })
+    },
+    3,
+    `YouTranscripts[${videoId}]`
+  );
+
+  const data = await safeParseJson(response, `YouTranscripts[${videoId}]`);
+
+  if (!response.ok) {
+    console.error(`[YouTranscripts] Error for ${videoId}:`, data);
+    throw new Error(data?.message || `YouTranscripts error: ${response.status}`);
+  }
+
+  const segments = data?.transcript;
+  if (!segments?.length) {
+    throw new Error(`YouTranscripts: no transcript for ${videoId}`);
+  }
+
+  const text = segments.map(seg => seg.text).join('\n').trim();
+  if (!text) {
+    throw new Error(`YouTranscripts: empty transcript for ${videoId}`);
+  }
+
+  return { text, language: null };
+}
+
+// Fetch transcript: try YouTranscripts first (free), fall back to Supadata
+async function fetchTranscript(videoId, transcriptApiKey) {
+  try {
+    return await fetchTranscriptFromYouTranscripts(videoId);
+  } catch (err) {
+    console.warn(`[Transcript] YouTranscripts failed for ${videoId} (${err.message}), trying Supadata...`);
+  }
+
+  return await fetchTranscriptFromSupadata(videoId, transcriptApiKey);
 }
 
 // Fetch playlist info
