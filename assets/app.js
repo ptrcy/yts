@@ -754,11 +754,6 @@ document.addEventListener('DOMContentLoaded', () => {
         url: window.location.pathname
     });
 
-    // Show debug panel if ?debug=1 is present in the URL
-    if (new URLSearchParams(window.location.search).get('debug') === '1') {
-        setTimeout(showDebugPanel, 300);
-    }
-
     document.getElementById('debugTrigger').addEventListener('click', showDebugPanel);
 });
 
