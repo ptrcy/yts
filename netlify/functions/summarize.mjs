@@ -84,7 +84,11 @@ async function fetchTranscriptFromSupadata(videoId, transcriptApiKey) {
 
   // Immediate response
   if (data?.content) {
-    return { text: data.content, language: data.lang || null };
+    const content = data.content;
+    const text = Array.isArray(content)
+      ? content.map(seg => seg?.text || '').join('\n').trim()
+      : String(content).trim();
+    return { text, language: data.lang || null };
   }
 
   // Async job response - poll for result
@@ -115,7 +119,11 @@ async function fetchTranscriptFromSupadata(videoId, transcriptApiKey) {
     }
 
     if (pollData?.status === 'completed' && pollData?.content) {
-      return { text: pollData.content, language: pollData.lang || null };
+      const content = pollData.content;
+      const text = Array.isArray(content)
+        ? content.map(seg => seg?.text || '').join('\n').trim()
+        : String(content).trim();
+      return { text, language: pollData.lang || null };
     }
 
     if (pollData?.status === 'failed') {
