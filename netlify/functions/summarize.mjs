@@ -88,7 +88,7 @@ async function fetchTranscriptFromSupadata(videoId, transcriptApiKey) {
     const text = Array.isArray(content)
       ? content.map(seg => seg?.text || '').join('\n').trim()
       : String(content).trim();
-    return { text, language: data.lang || null };
+    return { text, language: data.lang || null, source: 'supadata' };
   }
 
   // Async job response - poll for result
@@ -123,7 +123,7 @@ async function fetchTranscriptFromSupadata(videoId, transcriptApiKey) {
       const text = Array.isArray(content)
         ? content.map(seg => seg?.text || '').join('\n').trim()
         : String(content).trim();
-      return { text, language: pollData.lang || null };
+      return { text, language: pollData.lang || null, source: 'supadata' };
     }
 
     if (pollData?.status === 'failed') {
@@ -169,7 +169,7 @@ async function fetchTranscriptFromYouTranscripts(videoId) {
     throw new Error(`YouTranscripts: empty transcript for ${videoId}`);
   }
 
-  return { text, language: null };
+  return { text, language: null, source: 'youtranscripts' };
 }
 
 // Fetch transcript: try YouTranscripts first (free), fall back to Supadata
@@ -375,7 +375,7 @@ export async function handler(event) {
       }
 
       try {
-        const { text: transcript, language } = await fetchTranscript(video.videoId, transcriptApiKey);
+        const { text: transcript, language, source: transcriptSource } = await fetchTranscript(video.videoId, transcriptApiKey);
         const summary = await summarizeTranscript(transcript, video.title, openaiApiKey, openaiBaseUrl, openaiModel, language);
 
         return {
@@ -385,6 +385,7 @@ export async function handler(event) {
             ...video,
             summary,
             language,
+            transcriptSource,
             status: 'success'
           })
         };

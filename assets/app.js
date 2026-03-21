@@ -406,6 +406,7 @@ function createVideoCard(video) {
                             ${publishedDate}
                         </span>
                         <span class="video-status ${video.status}">${video.status}</span>
+                        ${video.transcriptSource ? `<span class="transcript-source">${escapeHtml(video.transcriptSource)}</span>` : ''}
                     </div>
                 </div>
             </div>
@@ -525,6 +526,7 @@ async function summarizePlaylist() {
                     videoId: video.videoId,
                     httpStatus: processResponse.status,
                     resultStatus: result.status,
+                    transcriptSource: result.transcriptSource || null,
                     summaryLen: result.summary ? result.summary.length : 0,
                     summaryPreview: result.summary ? result.summary.substring(0, 200) : null
                 });
