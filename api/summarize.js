@@ -4,7 +4,7 @@ import {
   getPlaylistTitle,
   getRecentVideos,
   summarizeTranscript,
-} from '../lib/transcript.js';
+} from '../lib/summarize.js';
 
 // Set CORS headers
 function setCorsHeaders(res) {
