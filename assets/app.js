@@ -758,6 +758,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (new URLSearchParams(window.location.search).get('debug') === '1') {
         setTimeout(showDebugPanel, 300);
     }
+
+    document.getElementById('debugTrigger').addEventListener('click', showDebugPanel);
 });
 
 // Keyboard shortcuts
