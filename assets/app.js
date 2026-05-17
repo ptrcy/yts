@@ -95,7 +95,9 @@ const STORAGE_KEYS = {
     openaiBaseUrl: 'yps_openai_base_url',
     openaiModel: 'yps_openai_model',
     transcriptKey: 'yps_transcript_key',
-    theme: 'yps_theme'
+    theme: 'yps_theme',
+    cloudName: 'yps_cloud_name',
+    cloudPassword: 'yps_cloud_password'
 };
 
 // Current playlist title for HTML export
@@ -105,8 +107,6 @@ let currentPlaylistTitle = 'Summaries';
 const elements = {
     settingsBtn: document.getElementById('settingsBtn'),
     themeToggle: document.getElementById('themeToggle'),
-    exportConfigBtn: document.getElementById('exportConfigBtn'),
-    importConfigBtn: document.getElementById('importConfigBtn'),
     modalOverlay: document.getElementById('modalOverlay'),
     modalClose: document.getElementById('modalClose'),
     cancelBtn: document.getElementById('cancelBtn'),
@@ -131,7 +131,12 @@ const elements = {
     openaiKeyInput: document.getElementById('openaiKeyInput'),
     openaiBaseUrlInput: document.getElementById('openaiBaseUrlInput'),
     openaiModelInput: document.getElementById('openaiModelInput'),
-    transcriptKeyInput: document.getElementById('transcriptKeyInput')
+    transcriptKeyInput: document.getElementById('transcriptKeyInput'),
+    // Cloud sync
+    cloudNameInput: document.getElementById('cloudNameInput'),
+    cloudPasswordInput: document.getElementById('cloudPasswordInput'),
+    saveToServerBtn: document.getElementById('saveToServerBtn'),
+    loadFromServerBtn: document.getElementById('loadFromServerBtn')
 };
 
 // Load settings from localStorage
@@ -153,6 +158,8 @@ function loadSettings() {
     elements.openaiBaseUrlInput.value = settings.openaiBaseUrl;
     elements.openaiModelInput.value = settings.openaiModel;
     elements.transcriptKeyInput.value = settings.transcriptKey;
+    elements.cloudNameInput.value = localStorage.getItem(STORAGE_KEYS.cloudName) || '';
+    elements.cloudPasswordInput.value = localStorage.getItem(STORAGE_KEYS.cloudPassword) || '';
 
     updatePlaylistBadge(settings.playlistId);
     return settings;
@@ -214,91 +221,6 @@ function toggleTheme() {
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', newTheme);
     localStorage.setItem(STORAGE_KEYS.theme, newTheme);
-}
-
-// Export config to JSON
-function exportConfig() {
-    const config = {
-        playlistId: localStorage.getItem(STORAGE_KEYS.playlistId) || '',
-        hoursBack: localStorage.getItem(STORAGE_KEYS.hoursBack) || '168',
-        youtubeKey: localStorage.getItem(STORAGE_KEYS.youtubeKey) || '',
-        openaiKey: localStorage.getItem(STORAGE_KEYS.openaiKey) || '',
-        openaiBaseUrl: localStorage.getItem(STORAGE_KEYS.openaiBaseUrl) || '',
-        openaiModel: localStorage.getItem(STORAGE_KEYS.openaiModel) || '',
-        transcriptKey: localStorage.getItem(STORAGE_KEYS.transcriptKey) || ''
-    };
-
-    const jsonString = JSON.stringify(config, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'playlist-summarizer-config.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    showToast('Config exported successfully', 'success');
-}
-
-// Import config from clipboard
-async function importConfig() {
-    try {
-        const text = await navigator.clipboard.readText();
-        let config;
-
-        try {
-            config = JSON.parse(text);
-        } catch (e) {
-            showToast('Invalid JSON format in clipboard', 'error');
-            return;
-        }
-
-        // Validate config structure
-        const validKeys = ['playlistId', 'hoursBack', 'youtubeKey', 'openaiKey', 'openaiBaseUrl', 'openaiModel', 'transcriptKey'];
-        const hasValidKey = validKeys.some(key => key in config);
-
-        if (!hasValidKey) {
-            showToast('Invalid config format: no recognized fields', 'error');
-            return;
-        }
-
-        // Import valid fields
-        if (config.playlistId !== undefined) {
-            localStorage.setItem(STORAGE_KEYS.playlistId, config.playlistId);
-        }
-        if (config.hoursBack !== undefined) {
-            localStorage.setItem(STORAGE_KEYS.hoursBack, String(config.hoursBack));
-        }
-        if (config.youtubeKey !== undefined) {
-            localStorage.setItem(STORAGE_KEYS.youtubeKey, config.youtubeKey);
-        }
-        if (config.openaiKey !== undefined) {
-            localStorage.setItem(STORAGE_KEYS.openaiKey, config.openaiKey);
-        }
-        if (config.openaiBaseUrl !== undefined) {
-            localStorage.setItem(STORAGE_KEYS.openaiBaseUrl, config.openaiBaseUrl);
-        }
-        if (config.openaiModel !== undefined) {
-            localStorage.setItem(STORAGE_KEYS.openaiModel, config.openaiModel);
-        }
-        if (config.transcriptKey !== undefined) {
-            localStorage.setItem(STORAGE_KEYS.transcriptKey, config.transcriptKey);
-        }
-
-        // Reload settings in the form
-        loadSettings();
-        showToast('Config imported successfully', 'success');
-
-    } catch (e) {
-        if (e.name === 'NotAllowedError') {
-            showToast('Clipboard access denied. Please allow clipboard permissions.', 'error');
-        } else {
-            showToast('Failed to read clipboard', 'error');
-        }
-    }
 }
 
 // Show toast notification
@@ -564,11 +486,116 @@ async function summarizePlaylist() {
     }
 }
 
+// Save current form values to server under a named profile
+async function saveToServer() {
+    const name = elements.cloudNameInput.value.trim();
+    const password = elements.cloudPasswordInput.value;
+
+    if (!name) {
+        showToast('Enter a profile name to save', 'error');
+        return;
+    }
+
+    localStorage.setItem(STORAGE_KEYS.cloudName, name);
+    if (password) localStorage.setItem(STORAGE_KEYS.cloudPassword, password);
+
+    const settings = {
+        playlistId: elements.playlistIdInput.value.trim(),
+        hoursBack: elements.hoursBackInput.value || '168',
+        youtubeKey: elements.youtubeKeyInput.value.trim(),
+        openaiKey: elements.openaiKeyInput.value.trim(),
+        openaiBaseUrl: elements.openaiBaseUrlInput.value.trim(),
+        openaiModel: elements.openaiModelInput.value.trim(),
+        transcriptKey: elements.transcriptKeyInput.value.trim()
+    };
+
+    const btn = elements.saveToServerBtn;
+    const span = btn.querySelector('span');
+    btn.disabled = true;
+    const originalText = span.textContent;
+    span.textContent = 'Saving…';
+
+    try {
+        const response = await fetch(`${API_BASE}/settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'save', name, password, settings })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Failed to save to server');
+        showToast(`Profile "${name}" saved to server`, 'success');
+    } catch (e) {
+        showToast(e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        span.textContent = originalText;
+    }
+}
+
+// Load a named profile from server and apply to form + localStorage
+async function loadFromServer() {
+    const name = elements.cloudNameInput.value.trim();
+    const password = elements.cloudPasswordInput.value;
+
+    if (!name) {
+        showToast('Enter a profile name to load', 'error');
+        return;
+    }
+
+    localStorage.setItem(STORAGE_KEYS.cloudName, name);
+    if (password) localStorage.setItem(STORAGE_KEYS.cloudPassword, password);
+
+    const btn = elements.loadFromServerBtn;
+    const span = btn.querySelector('span');
+    btn.disabled = true;
+    const originalText = span.textContent;
+    span.textContent = 'Loading…';
+
+    try {
+        const response = await fetch(`${API_BASE}/settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'load', name, password })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Failed to load from server');
+
+        const { settings } = result;
+
+        // Populate form
+        if (settings.playlistId !== undefined) elements.playlistIdInput.value = settings.playlistId;
+        if (settings.hoursBack !== undefined) elements.hoursBackInput.value = settings.hoursBack;
+        if (settings.youtubeKey !== undefined) elements.youtubeKeyInput.value = settings.youtubeKey;
+        if (settings.openaiKey !== undefined) elements.openaiKeyInput.value = settings.openaiKey;
+        if (settings.openaiBaseUrl !== undefined) elements.openaiBaseUrlInput.value = settings.openaiBaseUrl;
+        if (settings.openaiModel !== undefined) elements.openaiModelInput.value = settings.openaiModel;
+        if (settings.transcriptKey !== undefined) elements.transcriptKeyInput.value = settings.transcriptKey;
+
+        // Persist to localStorage
+        try {
+            localStorage.setItem(STORAGE_KEYS.playlistId, settings.playlistId || '');
+            localStorage.setItem(STORAGE_KEYS.hoursBack, String(settings.hoursBack || '168'));
+            localStorage.setItem(STORAGE_KEYS.youtubeKey, settings.youtubeKey || '');
+            localStorage.setItem(STORAGE_KEYS.openaiKey, settings.openaiKey || '');
+            localStorage.setItem(STORAGE_KEYS.openaiBaseUrl, settings.openaiBaseUrl || '');
+            localStorage.setItem(STORAGE_KEYS.openaiModel, settings.openaiModel || '');
+            localStorage.setItem(STORAGE_KEYS.transcriptKey, settings.transcriptKey || '');
+        } catch (_) { /* quota exceeded — form is still populated */ }
+
+        updatePlaylistBadge(settings.playlistId || '');
+        showToast(`Profile "${name}" loaded`, 'success');
+        closeModal();
+    } catch (e) {
+        showToast(e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        span.textContent = originalText;
+    }
+}
+
 // Event listeners
 elements.settingsBtn.addEventListener('click', openModal);
 elements.themeToggle.addEventListener('click', toggleTheme);
-elements.exportConfigBtn.addEventListener('click', exportConfig);
-elements.importConfigBtn.addEventListener('click', importConfig);
 elements.modalClose.addEventListener('click', closeModal);
 elements.cancelBtn.addEventListener('click', closeModal);
 elements.modalOverlay.addEventListener('click', (e) => {
@@ -577,6 +604,8 @@ elements.modalOverlay.addEventListener('click', (e) => {
 elements.saveBtn.addEventListener('click', () => {
     if (saveSettings()) closeModal();
 });
+elements.saveToServerBtn.addEventListener('click', saveToServer);
+elements.loadFromServerBtn.addEventListener('click', loadFromServer);
 elements.summarizeBtn.addEventListener('click', summarizePlaylist);
 
 // Delete video card handler (event delegation)

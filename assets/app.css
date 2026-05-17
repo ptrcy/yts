@@ -94,53 +94,6 @@ header {
     display: none;
 }
 
-/* Config action buttons */
-.config-actions {
-    display: flex;
-    gap: 0.5rem;
-    margin-right: auto;
-}
-
-.config-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    color: var(--text-secondary);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s ease;
-}
-
-.config-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-    border-color: var(--text-muted);
-}
-
-.config-btn svg {
-    width: 16px;
-    height: 16px;
-}
-
-.config-btn[title]:hover::after {
-    content: attr(title);
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 0.25rem 0.5rem;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    font-size: 0.75rem;
-    white-space: nowrap;
-    z-index: 10;
-}
-
 /* Hero section */
 .hero {
     text-align: center;
@@ -611,6 +564,94 @@ header {
         left: 1rem;
         right: 1rem;
         bottom: 1rem;
+    }
+}
+
+/* Cloud Sync section */
+.cloud-sync-section {
+    margin-top: 1.75rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.cloud-sync-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 0.875rem;
+}
+
+.cloud-sync-label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.cloud-sync-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.cloud-sync-row {
+    display: flex;
+    gap: 0.625rem;
+    margin-bottom: 0.625rem;
+}
+
+.cloud-sync-row .form-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.cloud-sync-btns {
+    display: flex;
+    gap: 0.625rem;
+}
+
+.btn-cloud {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.625rem 0.875rem;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.btn-cloud:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--accent);
+}
+
+.btn-cloud:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-cloud svg {
+    flex-shrink: 0;
+}
+
+.btn-cloud-load:hover {
+    border-color: #34d399;
+}
+
+@media (max-width: 400px) {
+    .cloud-sync-row {
+        flex-direction: column;
+    }
+    .cloud-sync-btns {
+        flex-direction: column;
     }
 }
 

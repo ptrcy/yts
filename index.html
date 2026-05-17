@@ -130,16 +130,29 @@
                         placeholder="your-supadata-api-key" autocomplete="one-time-code" data-form-type="other">
                     <p class="form-hint">For fetching YouTube transcripts (supadata.ai)</p>
                 </div>
+
+                <div class="cloud-sync-section">
+                    <div class="cloud-sync-header">
+                        <span class="cloud-sync-label">Cloud Sync</span>
+                        <span class="cloud-sync-hint">Save &amp; load settings across devices</span>
+                    </div>
+                    <div class="cloud-sync-row">
+                        <input type="text" class="form-input" id="cloudNameInput" placeholder="Profile name (e.g. home)" autocomplete="off">
+                        <input type="password" class="form-input" id="cloudPasswordInput" placeholder="Password (if set)" autocomplete="one-time-code" data-form-type="other">
+                    </div>
+                    <div class="cloud-sync-btns">
+                        <button class="btn-cloud" id="saveToServerBtn">
+                            <svg width="16" height="16"><use href="#icon-cloud-upload"/></svg>
+                            <span>Save to Server</span>
+                        </button>
+                        <button class="btn-cloud btn-cloud-load" id="loadFromServerBtn">
+                            <svg width="16" height="16"><use href="#icon-cloud-download"/></svg>
+                            <span>Load from Server</span>
+                        </button>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
-                <div class="config-actions">
-                    <button class="config-btn" id="exportConfigBtn" title="Export config to JSON">
-                        <svg><use href="#icon-export"/></svg>
-                    </button>
-                    <button class="config-btn" id="importConfigBtn" title="Import config from clipboard">
-                        <svg><use href="#icon-import"/></svg>
-                    </button>
-                </div>
                 <button class="btn-secondary" id="cancelBtn">Cancel</button>
                 <button class="btn-primary" id="saveBtn">Save Settings</button>
             </div>
