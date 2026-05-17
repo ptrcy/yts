@@ -7,7 +7,7 @@
 // Blob pathnames are SHA-256(password:name) so profiles are isolated per password.
 
 import { createHash } from 'crypto';
-import { put, get } from '@vercel/blob';
+import { put, list } from '@vercel/blob';
 
 const BLOB_PREFIX = 'yps-settings/';
 
@@ -62,15 +62,16 @@ export default async function handler(req, res) {
   }
 
   if (action === 'load') {
-    try {
-      const blob = await get(pathname, { access: 'private' });
-      if (!blob) return res.status(404).json({ error: 'Profile not found' });
-      const data = await blob.json();
-      return res.status(200).json({ settings: data });
-    } catch (e) {
-      if (e.name === 'BlobNotFoundError') return res.status(404).json({ error: 'Profile not found' });
-      throw e;
-    }
+    const { blobs } = await list({ prefix: pathname });
+    const match = blobs.find(b => b.pathname === pathname);
+    if (!match) return res.status(404).json({ error: 'Profile not found' });
+
+    const blobRes = await fetch(match.url, {
+      headers: { authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
+    });
+    if (!blobRes.ok) return res.status(500).json({ error: 'Failed to read stored settings' });
+    const data = await blobRes.json();
+    return res.status(200).json({ settings: data });
   }
 
   return res.status(400).json({ error: 'Unknown action' });
