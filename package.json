@@ -2,7 +2,6 @@
   "name": "yts-functions",
   "type": "module",
   "dependencies": {
-    "@netlify/blobs": "^8.0.0",
     "@supadata/js": "^1.0.0",
     "@vercel/blob": "^2.3.3",
     "openai": "^6.32.0"

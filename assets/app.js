@@ -34,7 +34,6 @@ function debugLog(category, data) {
         try {
             localStorage.setItem(DEBUG_LOG_KEY, JSON.stringify(logs));
         } catch (e) {
-            // If quota exceeded, aggressively trim logs and try again
             if (logs.length > 20) {
                 logs.splice(0, logs.length - 20);
                 try { localStorage.setItem(DEBUG_LOG_KEY, JSON.stringify(logs)); } catch (_) {}
@@ -79,12 +78,8 @@ function showDebugPanel() {
     document.body.appendChild(panel);
 }
 
-// API base path - auto-detect platform (Vercel vs Netlify)
-// Netlify uses /.netlify/functions, Vercel uses /api
-// Default to Vercel (/api) unless we detect Netlify hostname
-const API_BASE = window.location.hostname.includes('netlify')
-    ? '/.netlify/functions'
-    : '/api';
+// API base path - Vercel endpoints
+const API_BASE = '/api';
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -97,10 +92,12 @@ const STORAGE_KEYS = {
     transcriptKey: 'yps_transcript_key',
     theme: 'yps_theme',
     cloudName: 'yps_cloud_name',
-    cloudPassword: 'yps_cloud_password'
+    cloudPassword: 'yps_cloud_password',
+    activeMode: 'yps_active_mode',
+    savedLinks: 'yps_saved_links'
 };
 
-// Current playlist title for HTML export
+// Current title for HTML export
 let currentPlaylistTitle = 'Summaries';
 
 // DOM Elements
@@ -111,20 +108,32 @@ const elements = {
     modalClose: document.getElementById('modalClose'),
     cancelBtn: document.getElementById('cancelBtn'),
     saveBtn: document.getElementById('saveBtn'),
-    summarizeBtn: document.getElementById('summarizeBtn'),
+    // Mode tabs & views
+    tabLinks: document.getElementById('tabLinks'),
+    tabPlaylist: document.getElementById('tabPlaylist'),
+    viewLinks: document.getElementById('viewLinks'),
+    viewPlaylist: document.getElementById('viewPlaylist'),
+    // Link List controls
+    linksInput: document.getElementById('linksInput'),
+    linksCounter: document.getElementById('linksCounter'),
+    pasteLinksBtn: document.getElementById('pasteLinksBtn'),
+    clearLinksBtn: document.getElementById('clearLinksBtn'),
+    summarizeLinksBtn: document.getElementById('summarizeLinksBtn'),
+    // Playlist controls
     playlistBadge: document.getElementById('playlistBadge'),
     playlistStatus: document.getElementById('playlistStatus'),
+    summarizePlaylistBtn: document.getElementById('summarizePlaylistBtn'),
+    // Progress & Results
     progressSection: document.getElementById('progressSection'),
     progressText: document.getElementById('progressText'),
     progressDetail: document.getElementById('progressDetail'),
-    heroSection: document.getElementById('heroSection'),
     resultsHeader: document.getElementById('resultsHeader'),
     resultsTitle: document.getElementById('resultsTitle'),
     resultsMeta: document.getElementById('resultsMeta'),
     resultsGrid: document.getElementById('resultsGrid'),
     downloadHtmlBtn: document.getElementById('downloadHtmlBtn'),
     toastContainer: document.getElementById('toastContainer'),
-    // Inputs
+    // Settings inputs
     playlistIdInput: document.getElementById('playlistIdInput'),
     hoursBackInput: document.getElementById('hoursBackInput'),
     youtubeKeyInput: document.getElementById('youtubeKeyInput'),
@@ -138,6 +147,75 @@ const elements = {
     saveToServerBtn: document.getElementById('saveToServerBtn'),
     loadFromServerBtn: document.getElementById('loadFromServerBtn')
 };
+
+// Extract URLs from multiline string
+function extractUrls(text) {
+    if (!text) return [];
+    const lines = text.split(/[\r\n]+/);
+    const urls = [];
+    const seen = new Set();
+
+    for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line) continue;
+        const match = line.match(/https?:\/\/[^\s]+/i);
+        const urlCandidate = match ? match[0] : (line.startsWith('http') ? line : `https://${line}`);
+
+        try {
+            const parsed = new URL(urlCandidate);
+            const cleanUrl = parsed.href;
+            if (!seen.has(cleanUrl)) {
+                seen.add(cleanUrl);
+                urls.push(cleanUrl);
+            }
+        } catch (_) {
+            // Skip invalid URL strings
+        }
+    }
+    return urls;
+}
+
+// Update the link counter and button state
+function updateLinksCounter() {
+    const text = elements.linksInput.value;
+    const urls = extractUrls(text);
+    const count = urls.length;
+
+    if (count === 0) {
+        elements.linksCounter.textContent = '0 links detected';
+        elements.linksCounter.classList.remove('has-links');
+        elements.summarizeLinksBtn.querySelector('span').textContent = 'Summarize Video Links';
+    } else if (count === 1) {
+        elements.linksCounter.textContent = '1 link detected';
+        elements.linksCounter.classList.add('has-links');
+        elements.summarizeLinksBtn.querySelector('span').textContent = 'Summarize 1 Video Link';
+    } else {
+        elements.linksCounter.textContent = `${count} links detected`;
+        elements.linksCounter.classList.add('has-links');
+        elements.summarizeLinksBtn.querySelector('span').textContent = `Summarize ${count} Video Links`;
+    }
+
+    // Persist textarea contents for convenience
+    try {
+        localStorage.setItem(STORAGE_KEYS.savedLinks, text);
+    } catch (_) {}
+}
+
+// Mode tab switching
+function setMode(mode) {
+    const isLinks = mode === 'links';
+    elements.tabLinks.classList.toggle('active', isLinks);
+    elements.tabLinks.setAttribute('aria-selected', isLinks ? 'true' : 'false');
+    elements.tabPlaylist.classList.toggle('active', !isLinks);
+    elements.tabPlaylist.setAttribute('aria-selected', !isLinks ? 'true' : 'false');
+
+    elements.viewLinks.classList.toggle('active', isLinks);
+    elements.viewPlaylist.classList.toggle('active', !isLinks);
+
+    try {
+        localStorage.setItem(STORAGE_KEYS.activeMode, mode);
+    } catch (_) {}
+}
 
 // Load settings from localStorage
 function loadSettings() {
@@ -175,8 +253,8 @@ function saveSettings() {
     const openaiModel = elements.openaiModelInput.value.trim();
     const transcriptKey = elements.transcriptKeyInput.value.trim();
 
-    if (!playlistId || !youtubeKey || !openaiKey || !transcriptKey) {
-        showToast('Please fill in all required fields', 'error');
+    if (!openaiKey || !transcriptKey) {
+        showToast('Please enter both OpenAI API Key and Supadata API Key', 'error');
         return false;
     }
 
@@ -254,22 +332,42 @@ function closeModal() {
     elements.modalOverlay.classList.remove('active');
 }
 
+// Platform helpers
+function getPlatformInfo(platform, url = '') {
+    const p = String(platform || '').toLowerCase();
+    if (p === 'youtube' || url.includes('youtube.com') || url.includes('youtu.be')) {
+        return { name: 'YouTube', icon: 'youtube', cls: 'youtube' };
+    }
+    if (p === 'instagram' || url.includes('instagram.com') || url.includes('instagr.am')) {
+        return { name: 'Instagram', icon: 'instagram', cls: 'instagram' };
+    }
+    if (p === 'tiktok' || url.includes('tiktok.com')) {
+        return { name: 'TikTok', icon: 'tiktok', cls: 'tiktok' };
+    }
+    if (p === 'facebook' || url.includes('facebook.com') || url.includes('fb.watch') || url.includes('fb.com')) {
+        return { name: 'Facebook', icon: 'facebook', cls: 'facebook' };
+    }
+    return { name: 'Video', icon: 'video', cls: 'video' };
+}
+
 // Create video card HTML
 function createVideoCard(video) {
-    const publishedDate = new Date(video.publishedAt).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-    });
+    const publishedDate = video.publishedAt
+        ? new Date(video.publishedAt).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+          })
+        : 'Recent';
 
-    // Escape HTML in title and channel to prevent broken rendering
     const safeTitle = escapeHtml(video.title) || 'Untitled Video';
-    const safeChannel = escapeHtml(video.channel) || 'Unknown Channel';
+    const safeChannel = escapeHtml(video.channel) || 'Creator';
+    const targetUrl = video.url || (video.videoId ? `https://www.youtube.com/watch?v=${video.videoId}` : '#');
+    const platInfo = getPlatformInfo(video.platform, targetUrl);
 
     // Handle summary - escape error messages to prevent HTML injection
     let summaryText = video.summary || 'No summary available';
     if (summaryText.startsWith('Error:')) {
-        // Error messages may contain raw HTML from failed API responses - escape it
         summaryText = escapeHtml(summaryText);
     }
 
@@ -281,44 +379,50 @@ function createVideoCard(video) {
             throw new Error(`marked not available (typeof marked="${typeof marked}")`);
         }
         const parsed = marked.parse(summaryWithUnicode);
-        debugLog('render_ok', {
-            videoId: video.videoId,
-            inputLen: summaryWithUnicode.length,
-            outputLen: parsed ? parsed.length : 0,
-            inputPreview: summaryWithUnicode.substring(0, 200)
-        });
         summaryHtml = sanitizeHtml(parsed);
     } catch (renderErr) {
         debugLog('render_error', {
-            videoId: video.videoId,
+            videoId: video.videoId || video.url,
             error: renderErr.message,
-            markedType: typeof marked,
-            markedParseFn: typeof marked !== 'undefined' ? typeof marked.parse : 'n/a',
-            inputLen: summaryWithUnicode.length,
-            inputPreview: summaryWithUnicode.substring(0, 200)
+            summaryPreview: summaryWithUnicode.substring(0, 200)
         });
-        // Fallback: display raw text in a preformatted block so content is still readable
         summaryHtml = `<pre style="white-space:pre-wrap;word-break:break-word">${escapeHtml(summaryWithUnicode)}</pre>`;
     }
-    const thumbnailUrl = `https://img.youtube.com/vi/${video.videoId}/mqdefault.jpg`;
+
     const isRtl = video.language === 'ar';
+    const hasThumbnail = Boolean(video.thumbnail);
+
+    const thumbnailHtml = hasThumbnail
+        ? `<img src="${escapeHtml(video.thumbnail)}" alt="${safeTitle}" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+           <div class="platform-fallback-thumb ${platInfo.cls}" style="display:none">
+               <svg><use href="#icon-${platInfo.icon}"/></svg>
+               <span>${platInfo.name}</span>
+           </div>`
+        : `<div class="platform-fallback-thumb ${platInfo.cls}">
+               <svg><use href="#icon-${platInfo.icon}"/></svg>
+               <span>${platInfo.name}</span>
+           </div>`;
 
     return `
-        <article class="video-card" data-video-id="${video.videoId}">
+        <article class="video-card" data-video-id="${escapeHtml(video.videoId || '')}" data-video-url="${escapeHtml(video.url || '')}">
             <div class="video-header">
-                <a href="https://www.youtube.com/watch?v=${video.videoId}" target="_blank" class="video-thumbnail">
-                    <img src="${thumbnailUrl}" alt="${safeTitle}" loading="lazy">
+                <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" class="video-thumbnail">
+                    ${thumbnailHtml}
                     <div class="play-icon">
                         <svg><use href="#icon-play"/></svg>
                     </div>
                 </a>
                 <div class="video-info">
                     <h3 class="video-title">
-                        <a href="https://www.youtube.com/watch?v=${video.videoId}" target="_blank">
+                        <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer">
                             ${safeTitle}
                         </a>
                     </h3>
                     <div class="video-meta">
+                        <span class="platform-badge ${platInfo.cls}">
+                            <svg width="12" height="12"><use href="#icon-${platInfo.icon}"/></svg>
+                            ${platInfo.name}
+                        </span>
                         <span>
                             <svg><use href="#icon-user"/></svg>
                             ${safeChannel}
@@ -327,7 +431,7 @@ function createVideoCard(video) {
                             <svg><use href="#icon-calendar"/></svg>
                             ${publishedDate}
                         </span>
-                        <span class="video-status ${video.status}">${video.status}</span>
+                        <span class="video-status ${video.status || 'success'}">${video.status || 'success'}</span>
                         ${video.transcriptSource ? `<span class="transcript-source">${escapeHtml(video.transcriptSource)}</span>` : ''}
                     </div>
                 </div>
@@ -335,9 +439,9 @@ function createVideoCard(video) {
             <div class="video-summary">
                 <h4>Summary</h4>
                 <div class="summary-content${isRtl ? ' rtl' : ''}">${summaryHtml}</div>
-                <button class="delete-btn" title="Remove video from playlist">
+                <button class="delete-btn" title="Remove video card">
                     <svg><use href="#icon-trash"/></svg>
-                    Remove from Playlist
+                    Remove
                 </button>
             </div>
         </article>
@@ -350,7 +454,138 @@ function updateProgress(text, detail = '') {
     elements.progressDetail.textContent = detail;
 }
 
-// Summarize playlist
+// Summarize a list of URLs from the textarea
+async function summarizeLinks() {
+    const settings = {
+        openaiApiKey: localStorage.getItem(STORAGE_KEYS.openaiKey),
+        openaiBaseUrl: localStorage.getItem(STORAGE_KEYS.openaiBaseUrl) || '',
+        openaiModel: localStorage.getItem(STORAGE_KEYS.openaiModel) || '',
+        transcriptApiKey: localStorage.getItem(STORAGE_KEYS.transcriptKey)
+    };
+
+    if (!settings.openaiApiKey || !settings.transcriptApiKey) {
+        showToast('Please configure your OpenAI and Supadata API keys first', 'error');
+        openModal();
+        return;
+    }
+
+    const rawText = elements.linksInput.value.trim();
+    const urls = extractUrls(rawText);
+
+    if (urls.length === 0) {
+        showToast('Please enter at least one valid video link in the textarea', 'error');
+        elements.linksInput.focus();
+        return;
+    }
+
+    // Show progress
+    elements.summarizeLinksBtn.disabled = true;
+    elements.progressSection.classList.add('active');
+    elements.resultsHeader.classList.remove('active');
+    elements.resultsGrid.innerHTML = '';
+
+    try {
+        updateProgress('Parsing video links...');
+
+        const parseResponse = await fetch(`${API_BASE}/summarize`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'parse-links',
+                links: urls
+            })
+        });
+
+        const parseData = await parseResponse.json();
+        if (!parseResponse.ok) {
+            throw new Error(parseData.error || 'Failed to parse video links');
+        }
+
+        const videos = parseData.videos || [];
+        if (videos.length === 0) {
+            elements.progressSection.classList.remove('active');
+            showToast('No valid video links found', 'error');
+            elements.summarizeLinksBtn.disabled = false;
+            return;
+        }
+
+        // Show results header
+        elements.resultsHeader.classList.add('active');
+        currentPlaylistTitle = 'Video Summaries';
+        elements.resultsTitle.textContent = 'Video Summaries';
+        elements.resultsMeta.textContent = `0 of ${videos.length} videos summarized`;
+
+        // Process each video one by one
+        const results = [];
+        for (let i = 0; i < videos.length; i++) {
+            const video = videos[i];
+            const displayLabel = video.title || video.url;
+            updateProgress(`Processing video ${i + 1} of ${videos.length}...`, displayLabel);
+
+            try {
+                const processResponse = await fetch(`${API_BASE}/summarize`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'process',
+                        video,
+                        openaiApiKey: settings.openaiApiKey,
+                        openaiBaseUrl: settings.openaiBaseUrl,
+                        openaiModel: settings.openaiModel,
+                        transcriptApiKey: settings.transcriptApiKey
+                    })
+                });
+
+                let result;
+                try {
+                    result = await processResponse.json();
+                } catch (e) {
+                    throw new Error(`Server returned ${processResponse.status} (invalid JSON)`);
+                }
+
+                if (!processResponse.ok) {
+                    throw new Error(result.error || `Server returned ${processResponse.status}`);
+                }
+
+                debugLog('link_process', {
+                    url: video.url,
+                    platform: result.platform,
+                    status: result.status,
+                    summaryLen: result.summary ? result.summary.length : 0
+                });
+
+                results.push(result);
+                elements.resultsGrid.insertAdjacentHTML('beforeend', createVideoCard(result));
+                const successCount = results.filter(v => v.status === 'success').length;
+                elements.resultsMeta.textContent = `${successCount} of ${videos.length} videos summarized`;
+
+            } catch (err) {
+                console.error(`Error processing ${video.url}:`, err);
+                const errorResult = {
+                    ...video,
+                    summary: `Error: ${err.message}`,
+                    status: 'failed'
+                };
+                results.push(errorResult);
+                elements.resultsGrid.insertAdjacentHTML('beforeend', createVideoCard(errorResult));
+            }
+        }
+
+        // Complete
+        elements.progressSection.classList.remove('active');
+        const successCount = results.filter(v => v.status === 'success').length;
+        showToast(`Processed ${results.length} links (${successCount} successful)`, 'success');
+
+    } catch (error) {
+        console.error('Error:', error);
+        showToast(error.message, 'error');
+        elements.progressSection.classList.remove('active');
+    } finally {
+        elements.summarizeLinksBtn.disabled = false;
+    }
+}
+
+// Summarize YouTube playlist
 async function summarizePlaylist() {
     const settings = {
         playlistId: localStorage.getItem(STORAGE_KEYS.playlistId),
@@ -363,13 +598,13 @@ async function summarizePlaylist() {
     };
 
     if (!settings.playlistId || !settings.youtubeApiKey || !settings.openaiApiKey || !settings.transcriptApiKey) {
-        showToast('Please configure your settings first', 'error');
+        showToast('Please configure your YouTube & API settings first', 'error');
         openModal();
         return;
     }
 
     // Show progress
-    elements.summarizeBtn.disabled = true;
+    elements.summarizePlaylistBtn.disabled = true;
     elements.progressSection.classList.add('active');
     elements.resultsHeader.classList.remove('active');
     elements.resultsGrid.innerHTML = '';
@@ -404,13 +639,13 @@ async function summarizePlaylist() {
         if (videos.length === 0) {
             elements.progressSection.classList.remove('active');
             showToast('No recent videos found in playlist', 'error');
-            elements.summarizeBtn.disabled = false;
+            elements.summarizePlaylistBtn.disabled = false;
             return;
         }
 
         // Show results header
         elements.resultsHeader.classList.add('active');
-        currentPlaylistTitle = playlistTitle || 'Summaries';
+        currentPlaylistTitle = playlistTitle || 'Playlist Summaries';
         elements.resultsTitle.textContent = currentPlaylistTitle;
         elements.resultsMeta.textContent = `0 of ${videos.length} videos summarized`;
 
@@ -444,18 +679,15 @@ async function summarizePlaylist() {
                 if (!processResponse.ok) {
                     throw new Error(result.error || `Server returned ${processResponse.status}`);
                 }
-                debugLog('api_process', {
+                debugLog('playlist_process', {
                     videoId: video.videoId,
                     httpStatus: processResponse.status,
                     resultStatus: result.status,
                     transcriptSource: result.transcriptSource || null,
-                    summaryLen: result.summary ? result.summary.length : 0,
-                    summaryPreview: result.summary ? result.summary.substring(0, 200) : null
+                    summaryLen: result.summary ? result.summary.length : 0
                 });
                 results.push(result);
 
-                // Update UI immediately with this result without re-rendering existing cards
-                // This prevents deleted cards from reappearing
                 elements.resultsGrid.insertAdjacentHTML('beforeend', createVideoCard(result));
                 const successCount = results.filter(v => v.status === 'success').length;
                 elements.resultsMeta.textContent = `${successCount} of ${videos.length} videos summarized`;
@@ -482,7 +714,7 @@ async function summarizePlaylist() {
         showToast(error.message, 'error');
         elements.progressSection.classList.remove('active');
     } finally {
-        elements.summarizeBtn.disabled = false;
+        elements.summarizePlaylistBtn.disabled = false;
     }
 }
 
@@ -562,7 +794,6 @@ async function loadFromServer() {
 
         const { settings } = result;
 
-        // Populate form
         if (settings.playlistId !== undefined) elements.playlistIdInput.value = settings.playlistId;
         if (settings.hoursBack !== undefined) elements.hoursBackInput.value = settings.hoursBack;
         if (settings.youtubeKey !== undefined) elements.youtubeKeyInput.value = settings.youtubeKey;
@@ -571,7 +802,6 @@ async function loadFromServer() {
         if (settings.openaiModel !== undefined) elements.openaiModelInput.value = settings.openaiModel;
         if (settings.transcriptKey !== undefined) elements.transcriptKeyInput.value = settings.transcriptKey;
 
-        // Persist to localStorage
         try {
             localStorage.setItem(STORAGE_KEYS.playlistId, settings.playlistId || '');
             localStorage.setItem(STORAGE_KEYS.hoursBack, String(settings.hoursBack || '168'));
@@ -580,7 +810,7 @@ async function loadFromServer() {
             localStorage.setItem(STORAGE_KEYS.openaiBaseUrl, settings.openaiBaseUrl || '');
             localStorage.setItem(STORAGE_KEYS.openaiModel, settings.openaiModel || '');
             localStorage.setItem(STORAGE_KEYS.transcriptKey, settings.transcriptKey || '');
-        } catch (_) { /* quota exceeded — form is still populated */ }
+        } catch (_) { /* quota exceeded */ }
 
         updatePlaylistBadge(settings.playlistId || '');
         showToast(`Profile "${name}" loaded`, 'success');
@@ -591,6 +821,34 @@ async function loadFromServer() {
         btn.disabled = false;
         span.textContent = originalText;
     }
+}
+
+// Paste from clipboard helper
+async function pasteFromClipboard() {
+    try {
+        const text = await navigator.clipboard.readText();
+        if (!text) {
+            showToast('Clipboard is empty', 'info');
+            return;
+        }
+        if (elements.linksInput.value.trim()) {
+            elements.linksInput.value = elements.linksInput.value.trim() + '\n' + text.trim();
+        } else {
+            elements.linksInput.value = text.trim();
+        }
+        updateLinksCounter();
+        showToast('Links pasted from clipboard', 'success');
+    } catch (err) {
+        console.warn('Clipboard read failed:', err);
+        showToast('Clipboard access denied. Please paste manually.', 'info');
+        elements.linksInput.focus();
+    }
+}
+
+// Clear links helper
+function clearLinks() {
+    elements.linksInput.value = '';
+    updateLinksCounter();
 }
 
 // Event listeners
@@ -606,9 +864,21 @@ elements.saveBtn.addEventListener('click', () => {
 });
 elements.saveToServerBtn.addEventListener('click', saveToServer);
 elements.loadFromServerBtn.addEventListener('click', loadFromServer);
-elements.summarizeBtn.addEventListener('click', summarizePlaylist);
 
-// Delete video card handler (event delegation)
+// Mode tab listeners
+elements.tabLinks.addEventListener('click', () => setMode('links'));
+elements.tabPlaylist.addEventListener('click', () => setMode('playlist'));
+
+// Link List listeners
+elements.linksInput.addEventListener('input', updateLinksCounter);
+elements.pasteLinksBtn.addEventListener('click', pasteFromClipboard);
+elements.clearLinksBtn.addEventListener('click', clearLinks);
+elements.summarizeLinksBtn.addEventListener('click', summarizeLinks);
+
+// Playlist listener
+elements.summarizePlaylistBtn.addEventListener('click', summarizePlaylist);
+
+// Delete/Dismiss video card handler
 elements.resultsGrid.addEventListener('click', async (e) => {
     const deleteBtn = e.target.closest('.delete-btn');
     if (deleteBtn) {
@@ -617,51 +887,42 @@ elements.resultsGrid.addEventListener('click', async (e) => {
             const videoId = videoCard.dataset.videoId;
             const playlistId = localStorage.getItem(STORAGE_KEYS.playlistId);
 
-            // Disable button and show loading state
-            deleteBtn.disabled = true;
-            deleteBtn.style.opacity = '0.5';
+            // If we have a YouTube playlist ID and a YouTube video ID, try removing from playlist
+            const isYouTubePlaylistMode = elements.tabPlaylist.classList.contains('active') && videoId && playlistId;
 
-            try {
-                const response = await fetch(`${API_BASE}/delete-video`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ videoId, playlistId })
-                });
+            if (isYouTubePlaylistMode) {
+                deleteBtn.disabled = true;
+                deleteBtn.style.opacity = '0.5';
 
-                const result = await response.json();
+                try {
+                    const response = await fetch(`${API_BASE}/delete-video`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ videoId, playlistId })
+                    });
 
-                if (response.ok) {
-                    showToast('Video removed from playlist', 'success');
-
-                    // Find the next or previous card before removal
-                    const nextCard = videoCard.nextElementSibling;
-                    const prevCard = videoCard.previousElementSibling;
-
-                    videoCard.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-                    videoCard.style.opacity = '0';
-                    videoCard.style.transform = 'scale(0.95)';
-                    setTimeout(() => {
-                        videoCard.remove();
-
-                        // Scroll to next card (start) or previous card (end)
-                        const targetCard = nextCard || prevCard;
-                        if (targetCard) {
-                            targetCard.scrollIntoView({
-                                behavior: 'smooth',
-                                block: nextCard ? 'start' : 'end'
-                            });
-                        }
-                    }, 300);
-                } else {
-                    showToast(result.error || 'Failed to delete video', 'error');
-                    deleteBtn.disabled = false;
-                    deleteBtn.style.opacity = '';
+                    const result = await response.json();
+                    if (response.ok) {
+                        showToast('Video removed from playlist', 'success');
+                    } else {
+                        showToast(result.error || 'Removed card from view', 'info');
+                    }
+                } catch (error) {
+                    console.warn('Playlist delete call error:', error);
                 }
-            } catch (error) {
-                showToast('Network error: ' + error.message, 'error');
-                deleteBtn.disabled = false;
-                deleteBtn.style.opacity = '';
             }
+
+            // Animate card removal
+            videoCard.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+            videoCard.style.opacity = '0';
+            videoCard.style.transform = 'scale(0.95)';
+            setTimeout(() => {
+                videoCard.remove();
+                const remaining = elements.resultsGrid.querySelectorAll('.video-card').length;
+                if (elements.resultsMeta.textContent) {
+                    elements.resultsMeta.textContent = `${remaining} video${remaining === 1 ? '' : 's'} displayed`;
+                }
+            }, 300);
         }
     }
 });
@@ -673,27 +934,24 @@ elements.downloadHtmlBtn.addEventListener('click', async () => {
     btn.querySelector('span').textContent = 'Generating...';
 
     try {
-        // Fetch shared CSS
         const cssResponse = await fetch('assets/shared.css');
         const sharedCss = await cssResponse.text();
 
-        // Get the current theme
         const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
-        const safePlaylistTitle = escapeHtml(currentPlaylistTitle);
+        const safeTitle = escapeHtml(currentPlaylistTitle || 'Video Summaries');
 
-        // Get results grid without delete buttons
+        // Remove interactive delete buttons for export
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = elements.resultsGrid.innerHTML;
-        tempDiv.querySelectorAll('.delete-btn').forEach(btn => btn.remove());
+        tempDiv.querySelectorAll('.delete-btn').forEach(b => b.remove());
         const cleanedResultsHtml = tempDiv.innerHTML;
 
-        // Create HTML content with inlined shared CSS
         const htmlContent = `<!DOCTYPE html>
 <html lang="en" data-theme="${currentTheme}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${safePlaylistTitle}</title>
+    <title>${safeTitle}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
@@ -706,12 +964,12 @@ ${sharedCss}
     <div class="container">
         <header>
             <div class="logo">
-                <h1>${safePlaylistTitle}</h1>
+                <h1>${safeTitle}</h1>
                 <span class="logo-subtitle">Generated on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
             </div>
         </header>
 
-        <div class="results-header">
+        <div class="results-header" style="display: flex;">
             <h2 class="results-title">Summaries</h2>
             <span class="results-meta">${elements.resultsMeta.textContent}</span>
         </div>
@@ -723,14 +981,12 @@ ${sharedCss}
 </body>
 </html>`;
 
-        // Generate filename
         const now = new Date();
         const dateStr = now.toISOString().slice(0, 10);
         const timeStr = now.toTimeString().slice(0, 5).replace(':', '-');
-        const safeTitle = currentPlaylistTitle.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_');
-        const filename = `${safeTitle}_${dateStr}_${timeStr}.html`;
+        const sanitizedFilename = (currentPlaylistTitle || 'Summaries').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_');
+        const filename = `${sanitizedFilename}_${dateStr}_${timeStr}.html`;
 
-        // Create and download file
         const blob = new Blob([htmlContent], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -764,23 +1020,31 @@ async function loadIconSprite() {
 
 // Initialize
 loadIconSprite();
-initTheme(); // Apply theme immediately to prevent flash
+initTheme();
 
 document.addEventListener('DOMContentLoaded', () => {
     const settings = loadSettings();
-    // Open settings modal if not configured
-    if (!settings.playlistId || !settings.youtubeKey || !settings.openaiKey || !settings.transcriptKey) {
-        setTimeout(openModal, 500);
+
+    // Restore saved mode tab (default to 'links')
+    const savedMode = localStorage.getItem(STORAGE_KEYS.activeMode) || 'links';
+    setMode(savedMode);
+
+    // Restore saved links if any
+    const savedLinks = localStorage.getItem(STORAGE_KEYS.savedLinks) || '';
+    if (savedLinks) {
+        elements.linksInput.value = savedLinks;
+        updateLinksCounter();
     }
 
-    // Log startup diagnostics for post-mortem debugging
+    // Auto-prompt settings modal if core API keys are missing
+    if (!settings.openaiKey || !settings.transcriptKey) {
+        setTimeout(openModal, 600);
+    }
+
     debugLog('startup', {
         markedDefined: typeof marked !== 'undefined',
-        markedParseFn: typeof marked !== 'undefined' ? typeof marked.parse : 'n/a',
-        markedVersion: (typeof marked !== 'undefined' && marked.defaults && marked.defaults.version) || 'unknown',
-        userAgent: navigator.userAgent,
         apiBase: API_BASE,
-        url: window.location.pathname
+        activeMode: savedMode
     });
 
     document.getElementById('debugTrigger').addEventListener('click', showDebugPanel);

@@ -242,6 +242,84 @@ header {
     color: var(--text-secondary);
 }
 
+.platform-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 100px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.platform-badge.youtube {
+    background: rgba(255, 68, 56, 0.15);
+    color: #ff5252;
+}
+
+.platform-badge.instagram {
+    background: linear-gradient(135deg, rgba(225, 48, 108, 0.2), rgba(131, 58, 180, 0.2));
+    color: #fa7e1e;
+}
+
+.platform-badge.tiktok {
+    background: rgba(0, 242, 234, 0.15);
+    color: #00f2ea;
+}
+
+.platform-badge.facebook {
+    background: rgba(24, 119, 242, 0.15);
+    color: #4599ff;
+}
+
+.platform-badge.video,
+.platform-badge.generic {
+    background: rgba(120, 120, 128, 0.15);
+    color: var(--text-secondary);
+}
+
+.platform-fallback-thumb {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-hover) 100%);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    text-align: center;
+    padding: 0.5rem;
+}
+
+.platform-fallback-thumb svg {
+    width: 24px;
+    height: 24px;
+    margin-bottom: 2px;
+}
+
+.platform-fallback-thumb.youtube {
+    background: linear-gradient(135deg, rgba(255, 0, 0, 0.2) 0%, var(--bg-elevated) 100%);
+    color: #ff5252;
+}
+
+.platform-fallback-thumb.instagram {
+    background: linear-gradient(135deg, rgba(225, 48, 108, 0.2) 0%, rgba(131, 58, 180, 0.2) 100%);
+    color: #fa7e1e;
+}
+
+.platform-fallback-thumb.tiktok {
+    background: linear-gradient(135deg, rgba(0, 242, 234, 0.15) 0%, var(--bg-elevated) 100%);
+    color: #00f2ea;
+}
+
+.platform-fallback-thumb.facebook {
+    background: linear-gradient(135deg, rgba(24, 119, 242, 0.2) 0%, var(--bg-elevated) 100%);
+    color: #4599ff;
+}
+
 /* Video summary */
 .video-summary {
     padding: 1.5rem;
