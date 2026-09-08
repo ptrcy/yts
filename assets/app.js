@@ -58,23 +58,47 @@ function showDebugPanel() {
         'flex-direction:column', 'font-family:monospace', 'font-size:11px', 'box-shadow:0 4px 24px #0008'
     ].join(';');
 
-    const copyAll = `navigator.clipboard.writeText(localStorage.getItem('${DEBUG_LOG_KEY}')||'[]').then(()=>alert('Copied to clipboard'))`;
-    const clearAll = `localStorage.removeItem('${DEBUG_LOG_KEY}');document.getElementById('debugPanel').remove()`;
-    panel.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0">
-            <strong>YPS Debug Logs &mdash; ${logs.length} entries</strong>
-            <div style="display:flex;gap:6px">
-                <button onclick="${copyAll}" style="padding:3px 8px;cursor:pointer;border-radius:4px">Copy all</button>
-                <button onclick="${clearAll}" style="padding:3px 8px;cursor:pointer;border-radius:4px">Clear</button>
-                <button onclick="document.getElementById('debugPanel').remove()" style="padding:3px 8px;cursor:pointer;border-radius:4px">&#x2715;</button>
-            </div>
-        </div>
-        <pre id="debugLogContent" style="overflow:auto;flex:1;margin:0;white-space:pre-wrap;word-break:break-all;line-height:1.5">${
-            logs.length
-                ? logs.map(l => `[${l.ts}] [${l.cat}]\n${JSON.stringify(l.data, null, 2)}`).join('\n\n---\n\n')
-                : 'No logs yet. Run a summarization and check back.'
-        }</pre>`;
+    const bar = document.createElement('div');
+    bar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0';
+    const heading = document.createElement('strong');
+    heading.textContent = `YPS Debug Logs — ${logs.length} entries`;
+    const btnWrap = document.createElement('div');
+    btnWrap.style.cssText = 'display:flex;gap:6px';
 
+    const mkBtn = (label, onClick) => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        b.style.cssText = 'padding:3px 8px;cursor:pointer;border-radius:4px';
+        b.addEventListener('click', onClick);
+        return b;
+    };
+
+    btnWrap.appendChild(mkBtn('Copy all', () => {
+        navigator.clipboard
+            .writeText(localStorage.getItem(DEBUG_LOG_KEY) || '[]')
+            .then(() => showToast('Debug log copied to clipboard', 'success'))
+            .catch(() => showToast('Clipboard copy failed', 'error'));
+    }));
+    btnWrap.appendChild(mkBtn('Clear', () => {
+        localStorage.removeItem(DEBUG_LOG_KEY);
+        panel.remove();
+    }));
+    btnWrap.appendChild(mkBtn('✕', () => panel.remove()));
+
+    bar.appendChild(heading);
+    bar.appendChild(btnWrap);
+
+    // Build the log body with textContent only — log entries can contain
+    // untrusted, backend-influenced strings (titles, error text, URLs).
+    const pre = document.createElement('pre');
+    pre.id = 'debugLogContent';
+    pre.style.cssText = 'overflow:auto;flex:1;margin:0;white-space:pre-wrap;word-break:break-all;line-height:1.5';
+    pre.textContent = logs.length
+        ? logs.map(l => `[${l.ts}] [${l.cat}]\n${JSON.stringify(l.data, null, 2)}`).join('\n\n---\n\n')
+        : 'No logs yet. Run a summarization and check back.';
+
+    panel.appendChild(bar);
+    panel.appendChild(pre);
     document.body.appendChild(panel);
 }
 
@@ -362,7 +386,11 @@ function createVideoCard(video) {
 
     const safeTitle = escapeHtml(video.title) || 'Untitled Video';
     const safeChannel = escapeHtml(video.channel) || 'Creator';
-    const targetUrl = video.url || (video.videoId ? `https://www.youtube.com/watch?v=${video.videoId}` : '#');
+    let targetUrl = video.url || (video.videoId ? `https://www.youtube.com/watch?v=${video.videoId}` : '#');
+    // Only allow http(s) links to reach href — reject javascript:/data:/etc.
+    if (targetUrl !== '#' && !/^https?:\/\//i.test(targetUrl)) {
+        targetUrl = '#';
+    }
     const platInfo = getPlatformInfo(video.platform, targetUrl);
 
     // Handle summary - escape error messages to prevent HTML injection
@@ -371,8 +399,11 @@ function createVideoCard(video) {
         summaryText = escapeHtml(summaryText);
     }
 
-    // Convert LaTeX to Unicode before markdown parsing
-    const summaryWithUnicode = latexAllToUnicode(summaryText);
+    // Convert LaTeX to Unicode before markdown parsing (guard against the
+    // helper script failing to load / load-order changes)
+    const summaryWithUnicode = typeof latexAllToUnicode === 'function'
+        ? latexAllToUnicode(summaryText)
+        : summaryText;
     let summaryHtml;
     try {
         if (typeof marked === 'undefined' || typeof marked.parse !== 'function') {
@@ -393,7 +424,7 @@ function createVideoCard(video) {
     const hasThumbnail = Boolean(video.thumbnail);
 
     const thumbnailHtml = hasThumbnail
-        ? `<img src="${escapeHtml(video.thumbnail)}" alt="${safeTitle}" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        ? `<img src="${escapeHtml(video.thumbnail)}" alt="${safeTitle}" loading="lazy" data-thumb-fallback>
            <div class="platform-fallback-thumb ${platInfo.cls}" style="display:none">
                <svg><use href="#icon-${platInfo.icon}"/></svg>
                <span>${platInfo.name}</span>
@@ -431,7 +462,7 @@ function createVideoCard(video) {
                             <svg><use href="#icon-calendar"/></svg>
                             ${publishedDate}
                         </span>
-                        <span class="video-status ${video.status || 'success'}">${video.status || 'success'}</span>
+                        <span class="video-status ${video.status === 'failed' ? 'failed' : 'success'}">${video.status === 'failed' ? 'failed' : 'success'}</span>
                         ${video.transcriptSource ? `<span class="transcript-source">${escapeHtml(video.transcriptSource)}</span>` : ''}
                     </div>
                 </div>
@@ -589,7 +620,10 @@ async function summarizeLinks() {
 async function summarizePlaylist() {
     const settings = {
         playlistId: localStorage.getItem(STORAGE_KEYS.playlistId),
-        hoursBack: parseInt(localStorage.getItem(STORAGE_KEYS.hoursBack)) || 168,
+        hoursBack: (() => {
+            const hb = parseInt(localStorage.getItem(STORAGE_KEYS.hoursBack), 10);
+            return Number.isNaN(hb) ? 168 : hb;
+        })(),
         youtubeApiKey: localStorage.getItem(STORAGE_KEYS.youtubeKey),
         openaiApiKey: localStorage.getItem(STORAGE_KEYS.openaiKey),
         openaiBaseUrl: localStorage.getItem(STORAGE_KEYS.openaiBaseUrl) || '',
@@ -878,6 +912,17 @@ elements.summarizeLinksBtn.addEventListener('click', summarizeLinks);
 // Playlist listener
 elements.summarizePlaylistBtn.addEventListener('click', summarizePlaylist);
 
+// Thumbnail load-failure fallback (replaces inline onerror so a strict CSP works).
+// 'error' events don't bubble, so listen in the capture phase.
+elements.resultsGrid.addEventListener('error', (e) => {
+    const img = e.target;
+    if (img && img.tagName === 'IMG' && img.hasAttribute('data-thumb-fallback')) {
+        img.style.display = 'none';
+        const fallback = img.nextElementSibling;
+        if (fallback) fallback.style.display = 'flex';
+    }
+}, true);
+
 // Delete/Dismiss video card handler
 elements.resultsGrid.addEventListener('click', async (e) => {
     const deleteBtn = e.target.closest('.delete-btn');
@@ -951,6 +996,7 @@ elements.downloadHtmlBtn.addEventListener('click', async () => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data: https:; base-uri 'none'">
     <title>${safeTitle}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

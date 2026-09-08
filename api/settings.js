@@ -23,8 +23,11 @@ function checkAuth(password) {
   return password === serverPassword;
 }
 
-function sanitizeName(name) {
-  return (name || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+// Only accept names that are already canonical. Silently stripping characters
+// would let distinct names (e.g. "my profile" / "my_profile") collapse onto the
+// same blob pathname and overwrite each other.
+function isValidName(name) {
+  return typeof name === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(name);
 }
 
 function getBlobPathname(name, password) {
@@ -42,36 +45,49 @@ export default async function handler(req, res) {
   }
 
   const { action, name, password, settings } = req.body || {};
-  const safeName = sanitizeName(name);
 
-  if (!safeName) return res.status(400).json({ error: 'Invalid or missing name' });
+  if (!isValidName(name)) {
+    return res.status(400).json({
+      error: 'Name must be 1-64 characters, letters/numbers/hyphens/underscores only',
+    });
+  }
   if (!checkAuth(password)) return res.status(401).json({ error: 'Invalid password' });
 
-  const pathname = getBlobPathname(safeName, password);
+  const pathname = getBlobPathname(name, password);
 
   if (action === 'save') {
     if (!settings || typeof settings !== 'object') {
       return res.status(400).json({ error: 'Missing settings object' });
     }
-    await put(pathname, JSON.stringify(settings), {
-      access: 'private',
-      addRandomSuffix: false,
-      contentType: 'application/json',
-    });
+    try {
+      await put(pathname, JSON.stringify(settings), {
+        access: 'private',
+        addRandomSuffix: false,
+        contentType: 'application/json',
+      });
+    } catch (err) {
+      console.error('[settings] Failed to store profile', err);
+      return res.status(500).json({ error: 'Failed to store settings profile' });
+    }
     return res.status(200).json({ success: true });
   }
 
   if (action === 'load') {
-    const { blobs } = await list({ prefix: pathname });
-    const match = blobs.find(b => b.pathname === pathname);
-    if (!match) return res.status(404).json({ error: 'Profile not found' });
+    try {
+      const { blobs } = await list({ prefix: pathname });
+      const match = blobs.find(b => b.pathname === pathname);
+      if (!match) return res.status(404).json({ error: 'Profile not found' });
 
-    const blobRes = await fetch(match.url, {
-      headers: { authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
-    });
-    if (!blobRes.ok) return res.status(500).json({ error: 'Failed to read stored settings' });
-    const data = await blobRes.json();
-    return res.status(200).json({ settings: data });
+      const blobRes = await fetch(match.url, {
+        headers: { authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
+      });
+      if (!blobRes.ok) return res.status(500).json({ error: 'Failed to read stored settings' });
+      const data = await blobRes.json();
+      return res.status(200).json({ settings: data });
+    } catch (err) {
+      console.error('[settings] Failed to read profile', err);
+      return res.status(500).json({ error: 'Failed to read settings profile' });
+    }
   }
 
   return res.status(400).json({ error: 'Unknown action' });

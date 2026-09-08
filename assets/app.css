@@ -348,8 +348,8 @@ header {
     font-size: 1rem;
     font-weight: 500;
     letter-spacing: 0.02em;
-    color: var(--text-primary);
-    background: linear-gradient(135deg, var(--accent) 0%, #818cf8 100%);
+    color: var(--text-on-accent);
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);
     border: none;
     border-radius: 100px;
     cursor: pointer;
@@ -361,7 +361,7 @@ header {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, #818cf8 0%, var(--accent) 100%);
+    background: linear-gradient(135deg, var(--accent-bright) 0%, var(--accent) 100%);
     opacity: 0;
     transition: opacity 0.4s ease;
 }
@@ -530,8 +530,8 @@ header {
 
 .delete-btn:hover {
     background: rgba(255, 59, 48, 0.15);
-    color: var(--accent);
-    border-color: rgba(255, 59, 48, 0.3);
+    color: var(--error);
+    border-color: var(--error);
 }
 
 .delete-btn svg {
@@ -716,7 +716,7 @@ header {
     font-family: 'DM Sans', sans-serif;
     font-size: 0.875rem;
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--text-on-accent);
     background: var(--accent);
     border: none;
     border-radius: 10px;
@@ -725,7 +725,7 @@ header {
 }
 
 .btn-primary:hover {
-    background: #818cf8;
+    background: var(--accent-bright);
 }
 
 /* Toast */

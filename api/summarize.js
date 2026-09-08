@@ -8,6 +8,10 @@ import {
   summarizeTranscript,
 } from '../lib/summarize.js';
 
+const DEFAULT_HOURS_BACK = 24 * 7; // 7 days
+const MAX_HOURS_BACK = 24 * 90; // cap look-back at 90 days
+const MAX_LINKS_PER_REQUEST = 100;
+
 // Set CORS headers
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -35,10 +39,15 @@ export default async function handler(req, res) {
       }
 
       const parsedHours = Number(hoursBack);
-      const hours = Number.isInteger(parsedHours) && parsedHours > 0 ? parsedHours : 168;
+      const hours =
+        Number.isInteger(parsedHours) && parsedHours > 0
+          ? Math.min(parsedHours, MAX_HOURS_BACK)
+          : DEFAULT_HOURS_BACK;
 
-      const playlistTitle = await getPlaylistTitle(playlistId, youtubeApiKey);
-      const videos = await getRecentVideos(playlistId, youtubeApiKey, hours);
+      const [playlistTitle, videos] = await Promise.all([
+        getPlaylistTitle(playlistId, youtubeApiKey),
+        getRecentVideos(playlistId, youtubeApiKey, hours),
+      ]);
 
       return res.status(200).json({ playlistTitle, videos });
     }
@@ -50,7 +59,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Missing links parameter' });
       }
 
-      const videos = parseUrlList(links);
+      const videos = parseUrlList(links).slice(0, MAX_LINKS_PER_REQUEST);
       return res.status(200).json({ videos, count: videos.length });
     }
 

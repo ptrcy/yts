@@ -3,8 +3,8 @@ node_modules/
 
 # Environment files
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # Netlify
 .netlify/
@@ -26,4 +26,6 @@ __pycache__/
 venv/
 .venv/
 *.egg-info/
+
+# Vercel
 .vercel

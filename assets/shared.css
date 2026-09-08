@@ -22,8 +22,10 @@
     --text-secondary: #a0a0a5;
     --text-muted: #6a6a70;
     --accent: #6366f1;
+    --accent-bright: #818cf8;
     --accent-glow: rgba(99, 102, 241, 0.4);
     --accent-soft: rgba(99, 102, 241, 0.1);
+    --text-on-accent: #ffffff;
     --success: #30d158;
     --error: #ff453a;
     --warning: #ffd60a;
@@ -101,10 +103,17 @@ header {
     font-weight: 400;
     letter-spacing: -0.03em;
     line-height: 1;
+    color: var(--text-primary);
     background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+}
+
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+    .logo h1 {
+        -webkit-text-fill-color: currentColor;
+    }
 }
 
 .logo-subtitle {
@@ -318,6 +327,28 @@ header {
 .platform-fallback-thumb.facebook {
     background: linear-gradient(135deg, rgba(24, 119, 242, 0.2) 0%, var(--bg-elevated) 100%);
     color: #4599ff;
+}
+
+/* Light theme: brand hues above are too pale on a near-white surface.
+   Override with darker variants that meet WCAG AA for small text. */
+[data-theme="light"] .platform-badge.youtube,
+[data-theme="light"] .platform-fallback-thumb.youtube {
+    color: #c62828;
+}
+
+[data-theme="light"] .platform-badge.instagram,
+[data-theme="light"] .platform-fallback-thumb.instagram {
+    color: #b02867;
+}
+
+[data-theme="light"] .platform-badge.tiktok,
+[data-theme="light"] .platform-fallback-thumb.tiktok {
+    color: #0e7490;
+}
+
+[data-theme="light"] .platform-badge.facebook,
+[data-theme="light"] .platform-fallback-thumb.facebook {
+    color: #1554b8;
 }
 
 /* Video summary */

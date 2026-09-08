@@ -29,9 +29,11 @@ async function fetchWithRetry(url, options, maxRetries = 3, context = '') {
 
     if (!retryable.has(res.status)) return res;
 
-    // 429 may include Retry-After; otherwise exponential backoff
-    const ra = res.headers.get("Retry-After");
-    const delaySec = ra ? Number(ra) : Math.pow(2, i); // 1,2,4...
+    if (i === maxRetries - 1) break;
+
+    // 429 may include Retry-After (delta-seconds or HTTP-date); otherwise exponential backoff
+    const ra = Number(res.headers.get("Retry-After"));
+    const delaySec = Number.isFinite(ra) && ra > 0 ? ra : Math.pow(2, i); // 1,2,4...
     const delayMs = Math.min(5, delaySec) * 1000;
     console.warn(`[${context || 'Fetch'}] Retryable status ${res.status}, attempt ${i + 1}/${maxRetries}, waiting ${delayMs}ms`);
     await new Promise(r => setTimeout(r, delayMs));
@@ -100,6 +102,14 @@ async function findPlaylistItemId({ playlistId, videoId, accessToken }) {
 
     pageToken = data.nextPageToken;
     if (!pageToken) break;
+  }
+
+  // Scanned MAX_PAGES and there are still more pages: we can't be sure the
+  // video isn't present further down, so don't report a misleading "not found".
+  if (pageToken) {
+    const error = new Error('Playlist too large to scan for this video');
+    error.statusCode = 413;
+    throw error;
   }
 
   return null;
