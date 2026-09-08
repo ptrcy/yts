@@ -240,6 +240,11 @@ header {
     color: var(--error);
 }
 
+.video-status.failed.limit-failed {
+    background: rgba(255, 159, 10, 0.18);
+    color: #ff9f0a;
+}
+
 .transcript-source {
     padding: 0.25rem 0.625rem;
     border-radius: 100px;
@@ -425,6 +430,108 @@ header {
 .summary-content.rtl ol {
     padding-left: 0;
     padding-right: 1.5rem;
+}
+
+/* Error and limit-exceeded banners inside video cards */
+.video-summary.error-summary h4 {
+    color: var(--error);
+}
+
+.error-banner {
+    background: rgba(255, 69, 58, 0.08);
+    border: 1px solid rgba(255, 69, 58, 0.25);
+    border-radius: 8px;
+    padding: 1rem 1.125rem;
+    margin-bottom: 1rem;
+}
+
+.error-banner.limit-exceeded {
+    background: rgba(255, 159, 10, 0.08);
+    border-color: rgba(255, 159, 10, 0.35);
+}
+
+.error-banner-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.error-banner-icon {
+    width: 18px;
+    height: 18px;
+    color: var(--error);
+    flex-shrink: 0;
+}
+
+.error-banner.limit-exceeded .error-banner-icon {
+    color: #ff9f0a;
+}
+
+.error-banner-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.error-banner.limit-exceeded .error-banner-title {
+    color: #ff9f0a;
+}
+
+.error-banner-message {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 0.625rem;
+    word-break: break-word;
+}
+
+.error-banner-hint {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    background: rgba(0, 0, 0, 0.2);
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    border-left: 3px solid var(--accent);
+    line-height: 1.4;
+}
+
+.error-banner.limit-exceeded .error-banner-hint {
+    border-left-color: #ff9f0a;
+}
+
+.error-banner-hint a {
+    color: var(--accent-bright);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.error-banner-hint a:hover {
+    color: var(--text-primary);
+}
+
+[data-theme="light"] .video-status.failed.limit-failed {
+    background: rgba(217, 119, 6, 0.15);
+    color: #b45309;
+}
+
+[data-theme="light"] .error-banner {
+    background: rgba(215, 0, 21, 0.06);
+    border-color: rgba(215, 0, 21, 0.2);
+}
+
+[data-theme="light"] .error-banner.limit-exceeded {
+    background: rgba(217, 119, 6, 0.08);
+    border-color: rgba(217, 119, 6, 0.3);
+}
+
+[data-theme="light"] .error-banner.limit-exceeded .error-banner-icon,
+[data-theme="light"] .error-banner.limit-exceeded .error-banner-title {
+    color: #b45309;
+}
+
+[data-theme="light"] .error-banner-hint {
+    background: rgba(0, 0, 0, 0.04);
 }
 
 /* Responsive - shared */

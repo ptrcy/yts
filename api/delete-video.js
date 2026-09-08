@@ -11,11 +11,13 @@ const PLAYLIST_ITEMS_URL = "https://www.googleapis.com/youtube/v3/playlistItems"
 // Retry logic for fetch requests
 async function fetchWithRetry(url, options, maxRetries = 3, context = '') {
   const retryable = new Set([408, 429, 503]);
+  let lastStatus = null;
 
   for (let i = 0; i < maxRetries; i++) {
     let res;
     try {
       res = await fetch(url, options);
+      lastStatus = res.status;
     } catch (err) {
       const isLastAttempt = i === maxRetries - 1;
       const delayMs = Math.min(5, Math.pow(2, i)) * 1000;
@@ -40,6 +42,9 @@ async function fetchWithRetry(url, options, maxRetries = 3, context = '') {
   }
 
   console.error(`[${context || 'Fetch'}] Max retries (${maxRetries}) exceeded`);
+  if (lastStatus === 429) {
+    throw new Error(`${context ? context + ': ' : ''}YouTube API rate limit exceeded (HTTP 429, retry limit of ${maxRetries} reached)`);
+  }
   throw new Error(`${context ? context + ': ' : ''}Max retries exceeded`);
 }
 
@@ -89,7 +94,11 @@ async function findPlaylistItemId({ playlistId, videoId, accessToken }) {
 
     if (!res.ok) {
       const detail = await res.text();
-      const error = new Error(`Failed to fetch playlist items: ${detail}`);
+      let errorMsg = `Failed to fetch playlist items: ${detail}`;
+      if (res.status === 403 && /quota/i.test(detail)) {
+        errorMsg = 'YouTube Data API quota exceeded while scanning playlist items. Daily quota resets at midnight PT.';
+      }
+      const error = new Error(errorMsg);
       error.statusCode = res.status;
       throw error;
     }
@@ -126,7 +135,11 @@ async function deletePlaylistItem({ playlistItemId, accessToken }) {
 
   if (!res.ok) {
     const detail = await res.text();
-    const error = new Error(`Failed to delete playlist item: ${detail}`);
+    let errorMsg = `Failed to delete playlist item: ${detail}`;
+    if (res.status === 403 && /quota/i.test(detail)) {
+      errorMsg = 'YouTube Data API quota exceeded while deleting playlist item. Quota resets at midnight PT.';
+    }
+    const error = new Error(errorMsg);
     error.statusCode = res.status;
     throw error;
   }

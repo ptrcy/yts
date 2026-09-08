@@ -291,7 +291,7 @@ function saveSettings() {
         localStorage.setItem(STORAGE_KEYS.openaiModel, openaiModel);
         localStorage.setItem(STORAGE_KEYS.transcriptKey, transcriptKey);
     } catch (e) {
-        showToast('Storage quota exceeded. Please clear some browser data.', 'error');
+        showToast('Browser storage quota exceeded: Unable to save settings to localStorage. Please clear some browser data.', 'error');
         return false;
     }
 
@@ -374,6 +374,106 @@ function getPlatformInfo(platform, url = '') {
     return { name: 'Video', icon: 'video', cls: 'video' };
 }
 
+// Parse error details to determine whether an error represents a specific limit being exceeded
+function getErrorInfo(video) {
+    const summary = video?.summary || '';
+    const isError = video?.status === 'failed' || summary.startsWith('Error:');
+    if (!isError) return null;
+
+    let cleanMessage = summary.replace(/^Error:\s*/i, '').trim();
+    if (!cleanMessage) cleanMessage = 'Unknown error occurred';
+
+    // Determine limit type (from backend limitType or pattern matching on message)
+    let limitType = video.limitType || null;
+    const lower = cleanMessage.toLowerCase();
+
+    if (!limitType) {
+        if (lower.includes('supadata') && (lower.includes('limit') || lower.includes('quota') || lower.includes('credit'))) {
+            limitType = 'supadata';
+        } else if ((lower.includes('openai') || lower.includes('custom ai') || lower.includes('gpt-')) && (lower.includes('limit') || lower.includes('quota') || lower.includes('billing'))) {
+            limitType = 'openai';
+        } else if (lower.includes('youtube') && (lower.includes('quota') || lower.includes('limit'))) {
+            limitType = 'youtube';
+        } else if (lower.includes('storage') && lower.includes('quota')) {
+            limitType = 'storage';
+        } else if (lower.includes('limit exceeded') || lower.includes('rate limit') || lower.includes('quota exceeded') || lower.includes('too many requests')) {
+            // "Limit Exceeded" is Supadata's exact standard API response for transcript rate/quota exhaustion
+            limitType = 'supadata';
+        }
+    }
+
+    if (limitType === 'supadata') {
+        const displayMsg = cleanMessage === 'Limit Exceeded'
+            ? 'Supadata transcript API limit exceeded: You have reached the allowed request rate or monthly quota limit for your Supadata account.'
+            : cleanMessage;
+        return {
+            isLimit: true,
+            service: 'Supadata',
+            title: 'Supadata API Limit Exceeded',
+            badge: 'Supadata Limit',
+            message: displayMsg,
+            hint: 'Action: Transcript rate or monthly quota limit reached. Check your credits, monthly usage, or upgrade plan at <a href="https://supadata.ai" target="_blank" rel="noopener noreferrer">supadata.ai</a>.',
+        };
+    }
+
+    if (limitType === 'openai') {
+        const isCustom = lower.includes('custom ai');
+        const serviceName = isCustom ? 'AI Provider' : 'OpenAI';
+        return {
+            isLimit: true,
+            service: serviceName,
+            title: `${serviceName} Limit Exceeded`,
+            badge: `${serviceName} Limit`,
+            message: cleanMessage,
+            hint: isCustom
+                ? 'Action: Check your custom AI provider endpoint, usage limits, and account credits.'
+                : 'Action: Check your OpenAI plan, billing/usage credits, and rate limits at <a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer">platform.openai.com</a>.',
+        };
+    }
+
+    if (limitType === 'youtube') {
+        return {
+            isLimit: true,
+            service: 'YouTube',
+            title: 'YouTube Data API Quota Exceeded',
+            badge: 'YouTube Quota',
+            message: cleanMessage,
+            hint: 'Action: Daily YouTube Data API quota has been reached. Quotas reset daily at midnight Pacific Time (PT). Check your quota in Google Cloud Console.',
+        };
+    }
+
+    if (limitType === 'storage') {
+        return {
+            isLimit: true,
+            service: 'Browser Storage',
+            title: 'Browser Storage Quota Exceeded',
+            badge: 'Storage Quota',
+            message: cleanMessage,
+            hint: 'Action: Clear local browser storage or remove old video summaries to free up space.',
+        };
+    }
+
+    if (limitType === 'rate_limit') {
+        return {
+            isLimit: true,
+            service: 'API Rate Limit',
+            title: 'API Rate Limit Exceeded',
+            badge: 'Rate Limited',
+            message: cleanMessage,
+            hint: 'Action: Server or provider request rate limit exceeded. Please wait a few moments before retrying.',
+        };
+    }
+
+    return {
+        isLimit: false,
+        service: null,
+        title: 'Processing Failed',
+        badge: 'failed',
+        message: cleanMessage,
+        hint: null,
+    };
+}
+
 // Create video card HTML
 function createVideoCard(video) {
     const publishedDate = video.publishedAt
@@ -392,33 +492,7 @@ function createVideoCard(video) {
         targetUrl = '#';
     }
     const platInfo = getPlatformInfo(video.platform, targetUrl);
-
-    // Handle summary - escape error messages to prevent HTML injection
-    let summaryText = video.summary || 'No summary available';
-    if (summaryText.startsWith('Error:')) {
-        summaryText = escapeHtml(summaryText);
-    }
-
-    // Convert LaTeX to Unicode before markdown parsing (guard against the
-    // helper script failing to load / load-order changes)
-    const summaryWithUnicode = typeof latexAllToUnicode === 'function'
-        ? latexAllToUnicode(summaryText)
-        : summaryText;
-    let summaryHtml;
-    try {
-        if (typeof marked === 'undefined' || typeof marked.parse !== 'function') {
-            throw new Error(`marked not available (typeof marked="${typeof marked}")`);
-        }
-        const parsed = marked.parse(summaryWithUnicode);
-        summaryHtml = sanitizeHtml(parsed);
-    } catch (renderErr) {
-        debugLog('render_error', {
-            videoId: video.videoId || video.url,
-            error: renderErr.message,
-            summaryPreview: summaryWithUnicode.substring(0, 200)
-        });
-        summaryHtml = `<pre style="white-space:pre-wrap;word-break:break-word">${escapeHtml(summaryWithUnicode)}</pre>`;
-    }
+    const errorInfo = getErrorInfo(video);
 
     const isRtl = video.language === 'ar';
     const hasThumbnail = Boolean(video.thumbnail);
@@ -433,6 +507,68 @@ function createVideoCard(video) {
                <svg><use href="#icon-${platInfo.icon}"/></svg>
                <span>${platInfo.name}</span>
            </div>`;
+
+    // Status pill
+    let statusPillHtml;
+    if (errorInfo) {
+        const badgeClass = errorInfo.isLimit ? 'video-status failed limit-failed' : 'video-status failed';
+        statusPillHtml = `<span class="${badgeClass}" title="${escapeHtml(errorInfo.title)}">${escapeHtml(errorInfo.badge)}</span>`;
+    } else {
+        statusPillHtml = `<span class="video-status success">success</span>`;
+    }
+
+    // Summary section vs Error section
+    let summarySectionHtml;
+    if (errorInfo) {
+        summarySectionHtml = `
+            <div class="video-summary error-summary">
+                <h4>${escapeHtml(errorInfo.isLimit ? errorInfo.title : 'Processing Error')}</h4>
+                <div class="error-banner${errorInfo.isLimit ? ' limit-exceeded' : ''}">
+                    <div class="error-banner-header">
+                        <svg class="error-banner-icon"><use href="#icon-error"/></svg>
+                        <span class="error-banner-title">${escapeHtml(errorInfo.title)}</span>
+                    </div>
+                    <p class="error-banner-message">${escapeHtml(errorInfo.message)}</p>
+                    ${errorInfo.hint ? `<div class="error-banner-hint">${errorInfo.hint}</div>` : ''}
+                </div>
+                <button class="delete-btn" title="Remove video card">
+                    <svg><use href="#icon-trash"/></svg>
+                    Remove
+                </button>
+            </div>
+        `;
+    } else {
+        let summaryText = video.summary || 'No summary available';
+        const summaryWithUnicode = typeof latexAllToUnicode === 'function'
+            ? latexAllToUnicode(summaryText)
+            : summaryText;
+        let summaryHtml;
+        try {
+            if (typeof marked === 'undefined' || typeof marked.parse !== 'function') {
+                throw new Error(`marked not available (typeof marked="${typeof marked}")`);
+            }
+            const parsed = marked.parse(summaryWithUnicode);
+            summaryHtml = sanitizeHtml(parsed);
+        } catch (renderErr) {
+            debugLog('render_error', {
+                videoId: video.videoId || video.url,
+                error: renderErr.message,
+                summaryPreview: summaryWithUnicode.substring(0, 200)
+            });
+            summaryHtml = `<pre style="white-space:pre-wrap;word-break:break-word">${escapeHtml(summaryWithUnicode)}</pre>`;
+        }
+
+        summarySectionHtml = `
+            <div class="video-summary">
+                <h4>Summary</h4>
+                <div class="summary-content${isRtl ? ' rtl' : ''}">${summaryHtml}</div>
+                <button class="delete-btn" title="Remove video card">
+                    <svg><use href="#icon-trash"/></svg>
+                    Remove
+                </button>
+            </div>
+        `;
+    }
 
     return `
         <article class="video-card" data-video-id="${escapeHtml(video.videoId || '')}" data-video-url="${escapeHtml(video.url || '')}">
@@ -462,19 +598,12 @@ function createVideoCard(video) {
                             <svg><use href="#icon-calendar"/></svg>
                             ${publishedDate}
                         </span>
-                        <span class="video-status ${video.status === 'failed' ? 'failed' : 'success'}">${video.status === 'failed' ? 'failed' : 'success'}</span>
+                        ${statusPillHtml}
                         ${video.transcriptSource ? `<span class="transcript-source">${escapeHtml(video.transcriptSource)}</span>` : ''}
                     </div>
                 </div>
             </div>
-            <div class="video-summary">
-                <h4>Summary</h4>
-                <div class="summary-content${isRtl ? ' rtl' : ''}">${summaryHtml}</div>
-                <button class="delete-btn" title="Remove video card">
-                    <svg><use href="#icon-trash"/></svg>
-                    Remove
-                </button>
-            </div>
+            ${summarySectionHtml}
         </article>
     `;
 }
@@ -605,7 +734,19 @@ async function summarizeLinks() {
         // Complete
         elements.progressSection.classList.remove('active');
         const successCount = results.filter(v => v.status === 'success').length;
-        showToast(`Processed ${results.length} links (${successCount} successful)`, 'success');
+        const failedResults = results.filter(v => v.status === 'failed');
+        const limitErrors = failedResults.map(r => getErrorInfo(r)).filter(e => e && e.isLimit);
+
+        if (limitErrors.length > 0) {
+            const distinctServices = [...new Set(limitErrors.map(e => e.service))].join(' and ');
+            showToast(`${distinctServices} limit exceeded! Check card details for instructions.`, 'error');
+        } else if (results.length > 0 && successCount === 0) {
+            showToast(`All ${results.length} links failed to summarize`, 'error');
+        } else if (failedResults.length > 0) {
+            showToast(`Processed ${results.length} links (${successCount} successful, ${failedResults.length} failed)`, 'info');
+        } else {
+            showToast(`Processed ${results.length} links (${successCount} successful)`, 'success');
+        }
 
     } catch (error) {
         console.error('Error:', error);
@@ -741,7 +882,19 @@ async function summarizePlaylist() {
         // Done
         elements.progressSection.classList.remove('active');
         const successCount = results.filter(v => v.status === 'success').length;
-        showToast(`Processed ${results.length} videos (${successCount} successful)`, 'success');
+        const failedResults = results.filter(v => v.status === 'failed');
+        const limitErrors = failedResults.map(r => getErrorInfo(r)).filter(e => e && e.isLimit);
+
+        if (limitErrors.length > 0) {
+            const distinctServices = [...new Set(limitErrors.map(e => e.service))].join(' and ');
+            showToast(`${distinctServices} limit exceeded! Check video cards for details.`, 'error');
+        } else if (videos.length > 0 && successCount === 0) {
+            showToast(`All ${videos.length} videos failed to summarize`, 'error');
+        } else if (failedResults.length > 0) {
+            showToast(`Processed ${results.length} videos (${successCount} successful, ${failedResults.length} failed)`, 'info');
+        } else {
+            showToast(`Processed ${results.length} videos (${successCount} successful)`, 'success');
+        }
 
     } catch (error) {
         console.error('Error:', error);
@@ -844,7 +997,9 @@ async function loadFromServer() {
             localStorage.setItem(STORAGE_KEYS.openaiBaseUrl, settings.openaiBaseUrl || '');
             localStorage.setItem(STORAGE_KEYS.openaiModel, settings.openaiModel || '');
             localStorage.setItem(STORAGE_KEYS.transcriptKey, settings.transcriptKey || '');
-        } catch (_) { /* quota exceeded */ }
+        } catch (_) {
+            showToast('Browser storage quota exceeded: Settings loaded into form but could not be cached locally.', 'error');
+        }
 
         updatePlaylistBadge(settings.playlistId || '');
         showToast(`Profile "${name}" loaded`, 'success');

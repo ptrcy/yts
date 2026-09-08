@@ -108,11 +108,25 @@ export default async function handler(req, res) {
           status: 'success',
         });
       } catch (err) {
-        console.error(`[Process] Failed for video ${resolvedVideo?.videoId || resolvedVideo?.url} "${resolvedVideo?.title}":`, err?.message || err);
+        const rawMsg = err?.message || 'Unknown error';
+        console.error(`[Process] Failed for video ${resolvedVideo?.videoId || resolvedVideo?.url} "${resolvedVideo?.title}":`, rawMsg);
+
+        let limitType = null;
+        if (/supadata/i.test(rawMsg) && /limit|quota|credits/i.test(rawMsg)) {
+          limitType = 'supadata';
+        } else if (/(?:openai|custom ai)/i.test(rawMsg) && /limit|quota/i.test(rawMsg)) {
+          limitType = 'openai';
+        } else if (/youtube/i.test(rawMsg) && /limit|quota/i.test(rawMsg)) {
+          limitType = 'youtube';
+        } else if (/limit[ -]?exceeded|quota|rate[ -]?limit/i.test(rawMsg)) {
+          limitType = 'rate_limit';
+        }
+
         return res.status(200).json({
           ...resolvedVideo,
-          summary: `Error: ${err?.message || 'Unknown error'}`,
+          summary: `Error: ${rawMsg}`,
           status: 'failed',
+          limitType,
         });
       }
     }
