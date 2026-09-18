@@ -55,6 +55,10 @@
                     <svg><use href="#icon-youtube"/></svg>
                     <span>YouTube Playlist</span>
                 </button>
+                <button class="mode-tab" id="tabTranscript" role="tab" aria-selected="false" data-mode="transcript">
+                    <svg><use href="#icon-file-text"/></svg>
+                    <span>Transcript</span>
+                </button>
             </div>
 
             <!-- Mode View: Link List -->
@@ -107,6 +111,53 @@
                 <button class="action-btn" id="summarizePlaylistBtn">
                     <span>Summarize Recent Videos</span>
                 </button>
+            </div>
+
+            <!-- Mode View: Transcript -->
+            <div class="mode-view" id="viewTranscript">
+                <div class="links-card">
+                    <div class="links-card-header">
+                        <span class="links-card-title">
+                            <svg><use href="#icon-file-text"/></svg>
+                            Video URL
+                        </span>
+                        <div class="platform-chips">
+                            <span class="platform-chip"><svg><use href="#icon-youtube"/></svg> YouTube</span>
+                            <span class="platform-chip"><svg><use href="#icon-instagram"/></svg> Instagram Reels</span>
+                            <span class="platform-chip"><svg><use href="#icon-tiktok"/></svg> TikTok</span>
+                            <span class="platform-chip"><svg><use href="#icon-facebook"/></svg> Facebook Reels</span>
+                        </div>
+                    </div>
+                    <input
+                        type="text"
+                        class="form-input"
+                        id="transcriptUrlInput"
+                        placeholder="Paste a single video or reel URL"
+                        spellcheck="false"
+                        autocomplete="off"
+                    >
+                </div>
+                <button class="action-btn" id="fetchTranscriptBtn">
+                    <span>Get Transcript</span>
+                </button>
+
+                <div class="transcript-result" id="transcriptResult">
+                    <div class="transcript-result-header">
+                        <h3 class="transcript-result-title" id="transcriptResultTitle"></h3>
+                        <div class="transcript-result-meta" id="transcriptResultMeta"></div>
+                    </div>
+                    <div class="transcript-text" id="transcriptText"></div>
+                    <div class="transcript-result-actions">
+                        <button class="btn-link-action" id="copyTranscriptResultBtn" type="button">
+                            <svg><use href="#icon-clipboard"/></svg>
+                            <span>Copy Transcript</span>
+                        </button>
+                        <button class="btn-link-action" id="downloadTranscriptResultBtn" type="button">
+                            <svg><use href="#icon-download"/></svg>
+                            <span>Download .txt</span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </section>
 

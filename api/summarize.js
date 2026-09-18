@@ -1,5 +1,6 @@
 // Vercel serverless function for Playlist & Video Summarizer
 import {
+  classifyLimitType,
   fetchTranscript,
   getPlaylistTitle,
   getRecentVideos,
@@ -63,6 +64,52 @@ export default async function handler(req, res) {
       return res.status(200).json({ videos, count: videos.length });
     }
 
+    // ACTION: TRANSCRIPT - Fetch just the transcript for a single video (no summarization)
+    if (action === 'transcript') {
+      const { video, transcriptApiKey } = req.body || {};
+
+      if (!video || !transcriptApiKey) {
+        return res.status(400).json({ error: 'Missing video or transcriptApiKey' });
+      }
+
+      let resolvedVideo = video;
+      try {
+        resolvedVideo = await resolveVideoMetadata(video, transcriptApiKey);
+
+        const targetUrlOrId = resolvedVideo.url || resolvedVideo.videoId;
+        if (!targetUrlOrId) {
+          throw new Error('No valid URL or videoId provided');
+        }
+
+        const { text: transcript, language, source: transcriptSource } = await fetchTranscript(
+          targetUrlOrId,
+          transcriptApiKey
+        );
+
+        if (!transcript || !transcript.trim()) {
+          throw new Error('Empty transcript received');
+        }
+
+        return res.status(200).json({
+          ...resolvedVideo,
+          transcript,
+          language,
+          transcriptSource,
+          status: 'success',
+        });
+      } catch (err) {
+        const rawMsg = err?.message || 'Unknown error';
+        console.error(`[Transcript] Failed for video ${resolvedVideo?.videoId || resolvedVideo?.url} "${resolvedVideo?.title}":`, rawMsg);
+
+        return res.status(200).json({
+          ...resolvedVideo,
+          error: rawMsg,
+          status: 'failed',
+          limitType: classifyLimitType(rawMsg),
+        });
+      }
+    }
+
     // ACTION: PROCESS - Process a single video (works with playlist item or multi-platform URL)
     if (action === 'process') {
       const { video, openaiApiKey, openaiBaseUrl, openaiModel, transcriptApiKey } = req.body || {};
@@ -90,6 +137,10 @@ export default async function handler(req, res) {
           throw new Error('Empty transcript received');
         }
 
+        // Keep the transcript on resolvedVideo so it survives into the catch block
+        // below if summarization itself fails.
+        resolvedVideo = { ...resolvedVideo, transcript, language, transcriptSource };
+
         const summary = await summarizeTranscript(
           transcript,
           resolvedVideo.title,
@@ -103,35 +154,22 @@ export default async function handler(req, res) {
         return res.status(200).json({
           ...resolvedVideo,
           summary,
-          language,
-          transcriptSource,
           status: 'success',
         });
       } catch (err) {
         const rawMsg = err?.message || 'Unknown error';
         console.error(`[Process] Failed for video ${resolvedVideo?.videoId || resolvedVideo?.url} "${resolvedVideo?.title}":`, rawMsg);
 
-        let limitType = null;
-        if (/supadata/i.test(rawMsg) && /limit|quota|credits/i.test(rawMsg)) {
-          limitType = 'supadata';
-        } else if (/(?:openai|custom ai)/i.test(rawMsg) && /limit|quota/i.test(rawMsg)) {
-          limitType = 'openai';
-        } else if (/youtube/i.test(rawMsg) && /limit|quota/i.test(rawMsg)) {
-          limitType = 'youtube';
-        } else if (/limit[ -]?exceeded|quota|rate[ -]?limit/i.test(rawMsg)) {
-          limitType = 'rate_limit';
-        }
-
         return res.status(200).json({
           ...resolvedVideo,
           summary: `Error: ${rawMsg}`,
           status: 'failed',
-          limitType,
+          limitType: classifyLimitType(rawMsg),
         });
       }
     }
 
-    return res.status(400).json({ error: 'Invalid action. Use "list", "parse-links", or "process".' });
+    return res.status(400).json({ error: 'Invalid action. Use "list", "parse-links", "transcript", or "process".' });
 
   } catch (error) {
     console.error('Error in summarize API:', error);

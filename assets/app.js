@@ -124,6 +124,9 @@ const STORAGE_KEYS = {
 // Current title for HTML export
 let currentPlaylistTitle = 'Summaries';
 
+// Currently fetched single transcript (Transcript tab)
+let currentTranscriptData = null;
+
 // DOM Elements
 const elements = {
     settingsBtn: document.getElementById('settingsBtn'),
@@ -135,8 +138,10 @@ const elements = {
     // Mode tabs & views
     tabLinks: document.getElementById('tabLinks'),
     tabPlaylist: document.getElementById('tabPlaylist'),
+    tabTranscript: document.getElementById('tabTranscript'),
     viewLinks: document.getElementById('viewLinks'),
     viewPlaylist: document.getElementById('viewPlaylist'),
+    viewTranscript: document.getElementById('viewTranscript'),
     // Link List controls
     linksInput: document.getElementById('linksInput'),
     linksCounter: document.getElementById('linksCounter'),
@@ -147,6 +152,15 @@ const elements = {
     playlistBadge: document.getElementById('playlistBadge'),
     playlistStatus: document.getElementById('playlistStatus'),
     summarizePlaylistBtn: document.getElementById('summarizePlaylistBtn'),
+    // Transcript controls
+    transcriptUrlInput: document.getElementById('transcriptUrlInput'),
+    fetchTranscriptBtn: document.getElementById('fetchTranscriptBtn'),
+    transcriptResult: document.getElementById('transcriptResult'),
+    transcriptResultTitle: document.getElementById('transcriptResultTitle'),
+    transcriptResultMeta: document.getElementById('transcriptResultMeta'),
+    transcriptText: document.getElementById('transcriptText'),
+    copyTranscriptResultBtn: document.getElementById('copyTranscriptResultBtn'),
+    downloadTranscriptResultBtn: document.getElementById('downloadTranscriptResultBtn'),
     // Progress & Results
     progressSection: document.getElementById('progressSection'),
     progressText: document.getElementById('progressText'),
@@ -226,15 +240,19 @@ function updateLinksCounter() {
 }
 
 // Mode tab switching
-function setMode(mode) {
-    const isLinks = mode === 'links';
-    elements.tabLinks.classList.toggle('active', isLinks);
-    elements.tabLinks.setAttribute('aria-selected', isLinks ? 'true' : 'false');
-    elements.tabPlaylist.classList.toggle('active', !isLinks);
-    elements.tabPlaylist.setAttribute('aria-selected', !isLinks ? 'true' : 'false');
+const MODE_TABS = {
+    links: { tab: elements.tabLinks, view: elements.viewLinks },
+    playlist: { tab: elements.tabPlaylist, view: elements.viewPlaylist },
+    transcript: { tab: elements.tabTranscript, view: elements.viewTranscript }
+};
 
-    elements.viewLinks.classList.toggle('active', isLinks);
-    elements.viewPlaylist.classList.toggle('active', !isLinks);
+function setMode(mode) {
+    for (const [key, { tab, view }] of Object.entries(MODE_TABS)) {
+        const isActive = key === mode;
+        tab.classList.toggle('active', isActive);
+        tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        view.classList.toggle('active', isActive);
+    }
 
     try {
         localStorage.setItem(STORAGE_KEYS.activeMode, mode);
@@ -344,6 +362,21 @@ function showToast(message, type = 'info') {
         toast.style.transform = 'translateX(20px)';
         setTimeout(() => toast.remove(), 300);
     }, 4000);
+}
+
+// Copy text to clipboard with toast feedback
+async function copyText(text, successMsg) {
+    if (!text) {
+        showToast('Nothing to copy', 'error');
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(text);
+        showToast(successMsg, 'success');
+    } catch (err) {
+        console.warn('Clipboard write failed:', err);
+        showToast('Clipboard access denied. Please copy manually.', 'error');
+    }
 }
 
 // Open/close modal
@@ -474,6 +507,28 @@ function getErrorInfo(video) {
     };
 }
 
+// Build the row of action buttons (Copy Summary / Copy Transcript / Remove) for a video card
+function buildCardActionsHtml(hasSummary, hasTranscript) {
+    const buttons = [];
+    if (hasSummary) {
+        buttons.push(`<button class="card-action-btn copy-summary-btn" type="button" title="Copy summary">
+            <svg><use href="#icon-clipboard"/></svg>
+            Copy Summary
+        </button>`);
+    }
+    if (hasTranscript) {
+        buttons.push(`<button class="card-action-btn copy-transcript-btn" type="button" title="Copy transcript">
+            <svg><use href="#icon-clipboard"/></svg>
+            Copy Transcript
+        </button>`);
+    }
+    buttons.push(`<button class="card-action-btn delete-btn" type="button" title="Remove video card">
+        <svg><use href="#icon-trash"/></svg>
+        Remove
+    </button>`);
+    return `<div class="card-actions">${buttons.join('')}</div>`;
+}
+
 // Create video card HTML
 function createVideoCard(video) {
     const publishedDate = video.publishedAt
@@ -531,10 +586,8 @@ function createVideoCard(video) {
                     <p class="error-banner-message">${escapeHtml(errorInfo.message)}</p>
                     ${errorInfo.hint ? `<div class="error-banner-hint">${errorInfo.hint}</div>` : ''}
                 </div>
-                <button class="delete-btn" title="Remove video card">
-                    <svg><use href="#icon-trash"/></svg>
-                    Remove
-                </button>
+                ${video.transcript ? `<textarea class="raw-transcript-data" hidden>${escapeHtml(video.transcript)}</textarea>` : ''}
+                ${buildCardActionsHtml(false, Boolean(video.transcript))}
             </div>
         `;
     } else {
@@ -562,10 +615,9 @@ function createVideoCard(video) {
             <div class="video-summary">
                 <h4>Summary</h4>
                 <div class="summary-content${isRtl ? ' rtl' : ''}">${summaryHtml}</div>
-                <button class="delete-btn" title="Remove video card">
-                    <svg><use href="#icon-trash"/></svg>
-                    Remove
-                </button>
+                <textarea class="raw-summary-data" hidden>${escapeHtml(summaryWithUnicode)}</textarea>
+                ${video.transcript ? `<textarea class="raw-transcript-data" hidden>${escapeHtml(video.transcript)}</textarea>` : ''}
+                ${buildCardActionsHtml(true, Boolean(video.transcript))}
             </div>
         `;
     }
@@ -905,6 +957,97 @@ async function summarizePlaylist() {
     }
 }
 
+// Fetch just the transcript for a single video URL (Transcript tab)
+async function fetchSingleTranscript() {
+    const transcriptApiKey = localStorage.getItem(STORAGE_KEYS.transcriptKey);
+
+    if (!transcriptApiKey) {
+        showToast('Please configure your Supadata API key first', 'error');
+        openModal();
+        return;
+    }
+
+    const rawText = elements.transcriptUrlInput.value.trim();
+    const urls = extractUrls(rawText);
+
+    if (urls.length === 0) {
+        showToast('Please enter a valid video URL', 'error');
+        elements.transcriptUrlInput.focus();
+        return;
+    }
+
+    elements.fetchTranscriptBtn.disabled = true;
+    elements.progressSection.classList.add('active');
+    elements.transcriptResult.classList.remove('active');
+    currentTranscriptData = null;
+    updateProgress('Fetching transcript...', urls[0]);
+
+    try {
+        const response = await fetch(`${API_BASE}/summarize`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'transcript',
+                video: { url: urls[0] },
+                transcriptApiKey
+            })
+        });
+
+        let result;
+        try {
+            result = await response.json();
+        } catch (e) {
+            throw new Error(`Server returned ${response.status} (invalid JSON)`);
+        }
+
+        if (!response.ok) {
+            throw new Error(result.error || `Server returned ${response.status}`);
+        }
+
+        if (result.status === 'failed') {
+            throw new Error(result.error || 'Failed to fetch transcript');
+        }
+
+        currentTranscriptData = result;
+        renderTranscriptResult(result);
+        showToast('Transcript fetched successfully', 'success');
+
+    } catch (error) {
+        console.error('Transcript fetch error:', error);
+        showToast(error.message, 'error');
+    } finally {
+        elements.progressSection.classList.remove('active');
+        elements.fetchTranscriptBtn.disabled = false;
+    }
+}
+
+// Render the fetched transcript into the Transcript tab result panel
+function renderTranscriptResult(data) {
+    const platInfo = getPlatformInfo(data.platform, data.url || '');
+    elements.transcriptResultTitle.textContent = data.title || 'Untitled Video';
+
+    const metaParts = [platInfo.name, data.channel || 'Creator'];
+    if (data.transcriptSource) metaParts.push(data.transcriptSource);
+    elements.transcriptResultMeta.textContent = metaParts.join(' • ');
+
+    elements.transcriptText.textContent = data.transcript || '';
+    elements.transcriptResult.classList.add('active');
+}
+
+// Download the currently fetched transcript as a .txt file
+function downloadTranscriptFile(data) {
+    const safeTitle = (data.title || 'transcript').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_');
+    const blob = new Blob([data.transcript], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safeTitle}_transcript.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
 // Save current form values to server under a named profile
 async function saveToServer() {
     const name = elements.cloudNameInput.value.trim();
@@ -1057,6 +1200,7 @@ elements.loadFromServerBtn.addEventListener('click', loadFromServer);
 // Mode tab listeners
 elements.tabLinks.addEventListener('click', () => setMode('links'));
 elements.tabPlaylist.addEventListener('click', () => setMode('playlist'));
+elements.tabTranscript.addEventListener('click', () => setMode('transcript'));
 
 // Link List listeners
 elements.linksInput.addEventListener('input', updateLinksCounter);
@@ -1066,6 +1210,19 @@ elements.summarizeLinksBtn.addEventListener('click', summarizeLinks);
 
 // Playlist listener
 elements.summarizePlaylistBtn.addEventListener('click', summarizePlaylist);
+
+// Transcript tab listeners
+elements.fetchTranscriptBtn.addEventListener('click', fetchSingleTranscript);
+elements.copyTranscriptResultBtn.addEventListener('click', () => {
+    if (currentTranscriptData?.transcript) {
+        copyText(currentTranscriptData.transcript, 'Transcript copied to clipboard');
+    }
+});
+elements.downloadTranscriptResultBtn.addEventListener('click', () => {
+    if (currentTranscriptData?.transcript) {
+        downloadTranscriptFile(currentTranscriptData);
+    }
+});
 
 // Thumbnail load-failure fallback (replaces inline onerror so a strict CSP works).
 // 'error' events don't bubble, so listen in the capture phase.
@@ -1078,8 +1235,22 @@ elements.resultsGrid.addEventListener('error', (e) => {
     }
 }, true);
 
-// Delete/Dismiss video card handler
+// Copy Summary / Copy Transcript / Delete handler
 elements.resultsGrid.addEventListener('click', async (e) => {
+    const copySummaryBtn = e.target.closest('.copy-summary-btn');
+    if (copySummaryBtn) {
+        const raw = copySummaryBtn.closest('.video-card')?.querySelector('.raw-summary-data');
+        if (raw) copyText(raw.value, 'Summary copied to clipboard');
+        return;
+    }
+
+    const copyTranscriptBtn = e.target.closest('.copy-transcript-btn');
+    if (copyTranscriptBtn) {
+        const raw = copyTranscriptBtn.closest('.video-card')?.querySelector('.raw-transcript-data');
+        if (raw) copyText(raw.value, 'Transcript copied to clipboard');
+        return;
+    }
+
     const deleteBtn = e.target.closest('.delete-btn');
     if (deleteBtn) {
         const videoCard = deleteBtn.closest('.video-card');
@@ -1140,10 +1311,10 @@ elements.downloadHtmlBtn.addEventListener('click', async () => {
         const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
         const safeTitle = escapeHtml(currentPlaylistTitle || 'Video Summaries');
 
-        // Remove interactive delete buttons for export
+        // Remove interactive controls and hidden data holders for export (they need JS to work)
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = elements.resultsGrid.innerHTML;
-        tempDiv.querySelectorAll('.delete-btn').forEach(b => b.remove());
+        tempDiv.querySelectorAll('.card-actions, .raw-summary-data, .raw-transcript-data').forEach(el => el.remove());
         const cleanedResultsHtml = tempDiv.innerHTML;
 
         const htmlContent = `<!DOCTYPE html>
