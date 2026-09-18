@@ -42,6 +42,17 @@ function debugLog(category, data) {
     } catch (_) { /* ignore format errors */ }
 }
 
+// Marks an already-logged, server-reported transcript failure so the catch
+// block below doesn't log it a second time.
+class TranscriptServerError extends Error {}
+
+// Mask an API key for debug logs — keeps only the last 4 characters so
+// different keys/accounts can be told apart without exposing the secret.
+function maskKey(key) {
+    if (!key) return null;
+    return key.length > 4 ? `…${key.slice(-4)}` : '…';
+}
+
 function showDebugPanel() {
     const existing = document.getElementById('debugPanel');
     if (existing) { existing.remove(); return; }
@@ -388,6 +399,22 @@ function openModal() {
 function closeModal() {
     elements.modalOverlay.classList.remove('active');
 }
+
+// Toggle a password-type input between hidden and plain text
+function toggleInputVisibility(btn) {
+    const target = document.getElementById(btn.dataset.target);
+    if (!target) return;
+    const willShow = target.type === 'password';
+    target.type = willShow ? 'text' : 'password';
+    btn.classList.toggle('active', willShow);
+    btn.setAttribute('aria-label', willShow ? 'Hide API key' : 'Show API key');
+    const use = btn.querySelector('use');
+    if (use) use.setAttribute('href', willShow ? '#icon-eye-off' : '#icon-eye');
+}
+
+document.querySelectorAll('.input-toggle-visibility').forEach(btn => {
+    btn.addEventListener('click', () => toggleInputVisibility(btn));
+});
 
 // Platform helpers
 function getPlatformInfo(platform, url = '') {
@@ -763,7 +790,12 @@ async function summarizeLinks() {
                     url: video.url,
                     platform: result.platform,
                     status: result.status,
-                    summaryLen: result.summary ? result.summary.length : 0
+                    summaryLen: result.summary ? result.summary.length : 0,
+                    error: result.status === 'failed' ? result.summary : null,
+                    limitType: result.limitType || null,
+                    transcriptSource: result.transcriptSource || null,
+                    supadataKey: maskKey(settings.transcriptApiKey),
+                    openaiKey: maskKey(settings.openaiApiKey)
                 });
 
                 results.push(result);
@@ -773,6 +805,14 @@ async function summarizeLinks() {
 
             } catch (err) {
                 console.error(`Error processing ${video.url}:`, err);
+                debugLog('link_process', {
+                    url: video.url,
+                    status: 'failed',
+                    error: err.message,
+                    clientError: true,
+                    supadataKey: maskKey(settings.transcriptApiKey),
+                    openaiKey: maskKey(settings.openaiApiKey)
+                });
                 const errorResult = {
                     ...video,
                     summary: `Error: ${err.message}`,
@@ -911,7 +951,11 @@ async function summarizePlaylist() {
                     httpStatus: processResponse.status,
                     resultStatus: result.status,
                     transcriptSource: result.transcriptSource || null,
-                    summaryLen: result.summary ? result.summary.length : 0
+                    summaryLen: result.summary ? result.summary.length : 0,
+                    error: result.status === 'failed' ? result.summary : null,
+                    limitType: result.limitType || null,
+                    supadataKey: maskKey(settings.transcriptApiKey),
+                    openaiKey: maskKey(settings.openaiApiKey)
                 });
                 results.push(result);
 
@@ -921,6 +965,14 @@ async function summarizePlaylist() {
 
             } catch (err) {
                 console.error(`Error processing ${video.title}:`, err);
+                debugLog('playlist_process', {
+                    videoId: video.videoId,
+                    resultStatus: 'failed',
+                    error: err.message,
+                    clientError: true,
+                    supadataKey: maskKey(settings.transcriptApiKey),
+                    openaiKey: maskKey(settings.openaiApiKey)
+                });
                 const errorResult = {
                     ...video,
                     summary: `Error: ${err.message}`,
@@ -1005,8 +1057,23 @@ async function fetchSingleTranscript() {
         }
 
         if (result.status === 'failed') {
-            throw new Error(result.error || 'Failed to fetch transcript');
+            debugLog('transcript_fetch', {
+                url: urls[0],
+                status: 'failed',
+                error: result.error,
+                limitType: result.limitType || null,
+                supadataKey: maskKey(transcriptApiKey)
+            });
+            throw new TranscriptServerError(result.error || 'Failed to fetch transcript');
         }
+
+        debugLog('transcript_fetch', {
+            url: urls[0],
+            status: 'success',
+            transcriptSource: result.transcriptSource || null,
+            transcriptLen: result.transcript ? result.transcript.length : 0,
+            supadataKey: maskKey(transcriptApiKey)
+        });
 
         currentTranscriptData = result;
         renderTranscriptResult(result);
@@ -1014,6 +1081,15 @@ async function fetchSingleTranscript() {
 
     } catch (error) {
         console.error('Transcript fetch error:', error);
+        if (!(error instanceof TranscriptServerError)) {
+            debugLog('transcript_fetch', {
+                url: urls[0],
+                status: 'failed',
+                error: error.message,
+                clientError: true,
+                supadataKey: maskKey(transcriptApiKey)
+            });
+        }
         showToast(error.message, 'error');
     } finally {
         elements.progressSection.classList.remove('active');
