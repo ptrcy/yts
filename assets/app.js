@@ -627,6 +627,25 @@ function createVideoCard(video) {
             if (typeof marked === 'undefined' || typeof marked.parse !== 'function') {
                 throw new Error(`marked not available (typeof marked="${typeof marked}")`);
             }
+            if (!marked.__singleTildeFixed) {
+                // GFM treats a single ~x~ as strikethrough, which mangles "~10 sec ... ~10 sec".
+                // Only honor ~~double~~ tildes.
+                marked.use({
+                    tokenizer: {
+                        del(src) {
+                            const cap = /^~~(?=\S)([\s\S]*?\S)~~(?!~)/.exec(src);
+                            if (!cap) return undefined;
+                            return {
+                                type: 'del',
+                                raw: cap[0],
+                                text: cap[1],
+                                tokens: this.lexer.inlineTokens(cap[1])
+                            };
+                        }
+                    }
+                });
+                marked.__singleTildeFixed = true;
+            }
             const parsed = marked.parse(summaryWithUnicode);
             summaryHtml = sanitizeHtml(parsed);
         } catch (renderErr) {
