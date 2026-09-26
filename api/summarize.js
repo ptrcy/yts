@@ -3,6 +3,8 @@ import {
   classifyLimitType,
   fetchTranscript,
   getPlaylistTitle,
+  getPlaylistTitleFromSupadata,
+  getPlaylistVideosFromSupadata,
   getRecentVideos,
   parseUrlList,
   resolveVideoMetadata,
@@ -12,6 +14,7 @@ import {
 const DEFAULT_HOURS_BACK = 24 * 7; // 7 days
 const MAX_HOURS_BACK = 24 * 90; // cap look-back at 90 days
 const MAX_LINKS_PER_REQUEST = 100;
+const DEFAULT_CUSTOM_PLAYLIST_LIMIT = 20;
 
 // Set CORS headers
 function setCorsHeaders(res) {
@@ -48,6 +51,28 @@ export default async function handler(req, res) {
       const [playlistTitle, videos] = await Promise.all([
         getPlaylistTitle(playlistId, youtubeApiKey),
         getRecentVideos(playlistId, youtubeApiKey, hours),
+      ]);
+
+      return res.status(200).json({ playlistTitle, videos });
+    }
+
+    // ACTION: LIST-CUSTOM - Get videos of any public playlist via Supadata
+    if (action === 'list-custom') {
+      const { playlist, limit, transcriptApiKey } = req.body || {};
+
+      if (!playlist || !transcriptApiKey) {
+        return res.status(400).json({ error: 'Missing playlist or transcriptApiKey' });
+      }
+
+      const parsedLimit = Number(limit);
+      const max =
+        Number.isInteger(parsedLimit) && parsedLimit > 0
+          ? Math.min(parsedLimit, MAX_LINKS_PER_REQUEST)
+          : DEFAULT_CUSTOM_PLAYLIST_LIMIT;
+
+      const [playlistTitle, videos] = await Promise.all([
+        getPlaylistTitleFromSupadata(playlist, transcriptApiKey),
+        getPlaylistVideosFromSupadata(playlist, transcriptApiKey, max),
       ]);
 
       return res.status(200).json({ playlistTitle, videos });
@@ -169,7 +194,7 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.status(400).json({ error: 'Invalid action. Use "list", "parse-links", "transcript", or "process".' });
+    return res.status(400).json({ error: 'Invalid action. Use "list", "list-custom", "parse-links", "transcript", or "process".' });
 
   } catch (error) {
     console.error('Error in summarize API:', error);

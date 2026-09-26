@@ -18,7 +18,7 @@
     <script src="assets/purify.min.js"></script>
     <script src="assets/latex-unicode.js"></script>
     <link rel="stylesheet" href="assets/shared.css?v=1.1">
-    <link rel="stylesheet" href="assets/app.css?v=1.1">
+    <link rel="stylesheet" href="assets/app.css?v=1.2">
 </head>
 
 <body>
@@ -107,6 +107,37 @@
                 <div class="playlist-badge" id="playlistBadge">
                     <span class="dot"></span>
                     <span id="playlistStatus">No playlist configured</span>
+                </div>
+                <div class="links-card">
+                    <div class="links-card-header">
+                        <span class="links-card-title">
+                            <svg><use href="#icon-youtube"/></svg>
+                            Custom Public Playlist
+                        </span>
+                        <span class="links-counter">Leave empty to use your default playlist</span>
+                    </div>
+                    <div class="custom-playlist-row">
+                        <input
+                            type="text"
+                            class="form-input"
+                            id="customPlaylistInput"
+                            placeholder="Paste a public playlist URL or ID"
+                            spellcheck="false"
+                            autocomplete="off"
+                        >
+                        <input
+                            type="number"
+                            class="form-input custom-playlist-limit"
+                            id="customPlaylistLimitInput"
+                            value="20"
+                            min="1"
+                            max="100"
+                            title="Max videos to summarize (first N in playlist order)"
+                            aria-label="Max videos"
+                            autocomplete="off"
+                        >
+                    </div>
+                    <p class="form-hint">Custom playlists are listed via Supadata and summarize the first N videos (no date filter).</p>
                 </div>
                 <button class="action-btn" id="summarizePlaylistBtn">
                     <span>Summarize Recent Videos</span>
@@ -293,7 +324,7 @@
 
     <div class="toast-container" id="toastContainer"></div>
 
-    <script src="assets/app.js?v=1.1"></script>
+    <script src="assets/app.js?v=1.2"></script>
 </body>
 
 </html>

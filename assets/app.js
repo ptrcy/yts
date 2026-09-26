@@ -134,6 +134,8 @@ const STORAGE_KEYS = {
 
 // Current title for HTML export
 let currentPlaylistTitle = 'Summaries';
+// Playlist the current results came from; only the saved default playlist supports removal
+let activePlaylistId = null;
 
 // Currently fetched single transcript (Transcript tab)
 let currentTranscriptData = null;
@@ -163,6 +165,8 @@ const elements = {
     playlistBadge: document.getElementById('playlistBadge'),
     playlistStatus: document.getElementById('playlistStatus'),
     summarizePlaylistBtn: document.getElementById('summarizePlaylistBtn'),
+    customPlaylistInput: document.getElementById('customPlaylistInput'),
+    customPlaylistLimitInput: document.getElementById('customPlaylistLimitInput'),
     // Transcript controls
     transcriptUrlInput: document.getElementById('transcriptUrlInput'),
     fetchTranscriptBtn: document.getElementById('fetchTranscriptBtn'),
@@ -883,7 +887,17 @@ async function summarizePlaylist() {
         transcriptApiKey: localStorage.getItem(STORAGE_KEYS.transcriptKey)
     };
 
-    if (!settings.playlistId || !settings.youtubeApiKey || !settings.openaiApiKey || !settings.transcriptApiKey) {
+    // A custom playlist typed in the Playlist tab overrides the saved default for this run only
+    const customPlaylist = elements.customPlaylistInput.value.trim();
+    const customLimit = parseInt(elements.customPlaylistLimitInput.value, 10) || 20;
+
+    if (customPlaylist) {
+        if (!settings.openaiApiKey || !settings.transcriptApiKey) {
+            showToast('Please configure your OpenAI and Supadata API keys first', 'error');
+            openModal();
+            return;
+        }
+    } else if (!settings.playlistId || !settings.youtubeApiKey || !settings.openaiApiKey || !settings.transcriptApiKey) {
         showToast('Please configure your YouTube & API settings first', 'error');
         openModal();
         return;
@@ -902,12 +916,19 @@ async function summarizePlaylist() {
         const listResponse = await fetch(`${API_BASE}/summarize`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'list',
-                playlistId: settings.playlistId,
-                hoursBack: settings.hoursBack,
-                youtubeApiKey: settings.youtubeApiKey
-            })
+            body: JSON.stringify(customPlaylist
+                ? {
+                    action: 'list-custom',
+                    playlist: customPlaylist,
+                    limit: customLimit,
+                    transcriptApiKey: settings.transcriptApiKey
+                }
+                : {
+                    action: 'list',
+                    playlistId: settings.playlistId,
+                    hoursBack: settings.hoursBack,
+                    youtubeApiKey: settings.youtubeApiKey
+                })
         });
 
         let listData;
@@ -924,10 +945,12 @@ async function summarizePlaylist() {
 
         if (videos.length === 0) {
             elements.progressSection.classList.remove('active');
-            showToast('No recent videos found in playlist', 'error');
+            showToast(customPlaylist ? 'No videos found in playlist' : 'No recent videos found in playlist', 'error');
             elements.summarizePlaylistBtn.disabled = false;
             return;
         }
+
+        activePlaylistId = customPlaylist ? null : settings.playlistId;
 
         // Show results header
         elements.resultsHeader.classList.add('active');
@@ -939,7 +962,7 @@ async function summarizePlaylist() {
         const results = [];
         for (let i = 0; i < videos.length; i++) {
             const video = videos[i];
-            updateProgress(`Processing video ${i + 1} of ${videos.length}...`, video.title);
+            updateProgress(`Processing video ${i + 1} of ${videos.length}...`, video.title || video.url);
 
             try {
                 const processResponse = await fetch(`${API_BASE}/summarize`, {
@@ -1351,7 +1374,7 @@ elements.resultsGrid.addEventListener('click', async (e) => {
         const videoCard = deleteBtn.closest('.video-card');
         if (videoCard && !deleteBtn.disabled) {
             const videoId = videoCard.dataset.videoId;
-            const playlistId = localStorage.getItem(STORAGE_KEYS.playlistId);
+            const playlistId = activePlaylistId;
 
             // If we have a YouTube playlist ID and a YouTube video ID, try removing from playlist
             const isYouTubePlaylistMode = elements.tabPlaylist.classList.contains('active') && videoId && playlistId;
